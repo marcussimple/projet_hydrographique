@@ -36,13 +36,12 @@ const queries = [
         id: 2, 
         text: "Lister tous les thalwegs", 
         type: "interrogation", 
-        cypher: "MATCH (n:Thalweg) RETURN n.id as id, n.geometry as geometry LIMIT $limit",
+        cypher: "MATCH (t:Thalweg) RETURN t.id as id, t.geometry as geometry, t.accumulation as accumulation LIMIT $limit",
         customizable: true,
         customOptions: [
             { name: 'limit', type: 'number', default: 100, label: 'Nombre de thalwegs à afficher' }
         ]
     },
-    //...(autres requetes)
 ];
 
 function populateQueryLists() {
@@ -102,7 +101,7 @@ function showCustomizationModal(query) {
             const input = document.querySelector(`input[name="${option.name}"]`);
             customParams[option.name] = input.value;
         });
-        console.log('Custom params before execution:', customParams);  // Ajoutez cette ligne pour le débogage
+        console.log('Custom params before execution:', customParams);
         executeQuery(query.id, customParams);
         modal.style.display = 'none';
     };
@@ -117,37 +116,6 @@ async function executeQuery(queryId, customParams = {}) {
 
     console.log(`Executing query: ${query.text}`);
     console.log('Custom params:', customParams);
-
-    if (queryId === 2) {
-        // Utiliser les données manuelles pour les thalwegs
-        const manualThalwegs = [
-            {
-                id: "thalweg1",
-                coordinates: [
-                    [-74.82, 45.76],
-                    [-74.81, 45.765],
-                    [-74.805, 45.77],
-                    [-74.8, 45.775],
-                    [-74.795, 45.78]
-                ],
-                accumulation: 150
-            },
-            {
-                id: "thalweg2",
-                coordinates: [
-                    [-74.83, 45.75],
-                    [-74.825, 45.755],
-                    [-74.82, 45.76],
-                    [-74.815, 45.765],
-                    [-74.81, 45.77]
-                ],
-                accumulation: 200
-            }
-        ];
-        console.log("Using manual thalweg data:", manualThalwegs);
-        updateMap(manualThalwegs, queryId);
-        return;
-    }
 
     try {
         const response = await fetch('/execute_query/', {
@@ -180,21 +148,6 @@ async function executeQuery(queryId, customParams = {}) {
     }
 }
 
-function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-        const cookies = document.cookie.split(';');
-        for (let i = 0; i < cookies.length; i++) {
-            const cookie = cookies[i].trim();
-            if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                break;
-            }
-        }
-    }
-    return cookieValue;
-}
-
 function updateMap(data, queryId) {
     console.log("Updating map with data:", data);
 
@@ -214,36 +167,32 @@ function updateMap(data, queryId) {
         features: []
     };
 
-    if (queryId === 1) {
-        // ... (code pour les nœuds inchangé)
-    } else if (queryId === 2) {  // Thalwegs
-        // Données manuelles pour deux thalwegs
-        const manualThalwegs = [
-            {
-                id: "thalweg1",
-                coordinates: [
-                    [-74.82, 45.76],
-                    [-74.81, 45.765],
-                    [-74.805, 45.77],
-                    [-74.8, 45.775],
-                    [-74.795, 45.78]
-                ],
-                accumulation: 150
-            },
-            {
-                id: "thalweg2",
-                coordinates: [
-                    [-74.83, 45.75],
-                    [-74.825, 45.755],
-                    [-74.82, 45.76],
-                    [-74.815, 45.765],
-                    [-74.81, 45.77]
-                ],
-                accumulation: 200
-            }
-        ];
+    if (queryId === 1) {  // Nœuds
+        data.forEach(item => {
+            geojson.features.push({
+                type: 'Feature',
+                geometry: {
+                    type: 'Point',
+                    coordinates: [parseFloat(item.longitude), parseFloat(item.latitude)]
+                },
+                properties: item
+            });
+        });
 
-        manualThalwegs.forEach(thalweg => {
+        map.addSource('nodes', { type: 'geojson', data: geojson });
+        map.addLayer({
+            id: 'nodes',
+            type: 'circle',
+            source: 'nodes',
+            paint: {
+                'circle-radius': 6,
+                'circle-color': 'red',
+                'circle-stroke-width': 1,
+                'circle-stroke-color': '#fff'
+            }
+        });
+    } else if (queryId === 2) {  // Thalwegs
+        data.forEach(thalweg => {
             // Ajouter chaque point du thalweg
             thalweg.coordinates.forEach((coord, index) => {
                 pointsGeojson.features.push({
@@ -337,15 +286,15 @@ function updateMap(data, queryId) {
     addPopupInteractions(queryId);
 }
 
-
 function addPopupInteractions(queryId) {
-    if (queryId === 1 || queryId === 3) {
+    if (queryId === 1) {
         map.on('click', 'nodes', function(e) {
             var coordinates = e.features[0].geometry.coordinates.slice();
             var properties = e.features[0].properties;
-            var description = `<strong>ID:</strong> ${properties.id}<br>
-                               <strong>Latitude:</strong> ${coordinates[1]}<br>
-                               <strong>Longitude:</strong> ${coordinates[0]}`;
+            var description = `<strong>Nœud</strong><br>
+                               <strong>ID:</strong> ${properties.id}<br>
+                               <strong>Longitude:</strong> ${coordinates[0]}<br>
+                               <strong>Latitude:</strong> ${coordinates[1]}`;
             
             new mapboxgl.Popup()
                 .setLngLat(coordinates)
@@ -361,24 +310,24 @@ function addPopupInteractions(queryId) {
             map.getCanvas().style.cursor = '';
         });
     } else if (queryId === 2) {
-        map.on('click', 'edges', function(e) {
-            var coordinates = e.features[0].geometry.coordinates;
+        map.on('click', 'thalwegs', function(e) {
+            var coordinates = e.lngLat;
             var properties = e.features[0].properties;
             var description = `<strong>Thalweg</strong><br>
-                               <strong>De:</strong> (${coordinates[0][1]}, ${coordinates[0][0]})<br>
-                               <strong>À:</strong> (${coordinates[1][1]}, ${coordinates[1][0]})`;
+                               <strong>ID:</strong> ${properties.id}<br>
+                               <strong>Accumulation:</strong> ${properties.accumulation}`;
             
             new mapboxgl.Popup()
-                .setLngLat(coordinates[0])
+                .setLngLat(coordinates)
                 .setHTML(description)
                 .addTo(map);
         });
 
-        map.on('mouseenter', 'edges', function() {
+        map.on('mouseenter', 'thalwegs', function() {
             map.getCanvas().style.cursor = 'pointer';
         });
 
-        map.on('mouseleave', 'edges', function() {
+        map.on('mouseleave', 'thalwegs', function() {
             map.getCanvas().style.cursor = '';
         });
     }
@@ -388,7 +337,7 @@ function getCookie(name) {
     let cookieValue = null;
     if (document.cookie && document.cookie !== '') {
         const cookies = document.cookie.split(';');
-        for (let i = 0; cookies[i]; i++) {
+        for (let i = 0; i < cookies.length; i++) {
             const cookie = cookies[i].trim();
             if (cookie.substring(0, name.length + 1) === (name + '=')) {
                 cookieValue = decodeURIComponent(cookie.substring(name.length + 1));

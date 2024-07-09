@@ -35,7 +35,7 @@ def execute_query(request):
         print(f"Received query: {cypher}")
         print(f"Received params: {params}")
         
-        with driver.session() as session:
+        with driver.session(database=NEO4J_DATABASE) as session:
             try:
                 if 'limit' in params:
                     params['limit'] = int(params['limit'])
@@ -56,7 +56,8 @@ def execute_query(request):
                         coordinates = parse_linestring(geometry)
                         formatted_results.append({
                             "id": record.get('id'),
-                            "coordinates": coordinates
+                            "coordinates": coordinates,
+                            "accumulation": record.get('accumulation')
                         })
                 else:
                     formatted_results = records
