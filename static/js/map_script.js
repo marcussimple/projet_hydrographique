@@ -32,8 +32,17 @@ const queries = [
             { name: 'limit', type: 'number', default: 100, label: 'Nombre de nœuds à afficher' }
         ]
     },
-    { id: 2, text: "Lister tous les thalwegs", type: "interrogation", cypher: "MATCH (n1:Node)-[r:THALWEG]->(n2:Node) RETURN n1.id as id1, n1.longitude as long1, n1.latitude as lat1, n2.id as id2, n2.longitude as long2, n2.latitude as lat2 LIMIT 100" },
-    { id: 3, text: "Lister toutes les crêtes", type: "interrogation", cypher: "MATCH (n) WHERE n.type = 'ridge' RETURN n.id as id, n.longitude as longitude, n.latitude as latitude LIMIT 100" },
+    { 
+        id: 2, 
+        text: "Lister tous les thalwegs", 
+        type: "interrogation", 
+        cypher: "MATCH (n:Thalweg) RETURN n.id as id, n.geometry as geometry LIMIT $limit",
+        customizable: true,
+        customOptions: [
+            { name: 'limit', type: 'number', default: 100, label: 'Nombre de thalwegs à afficher' }
+        ]
+    },
+    //...(autres requetes)
 ];
 
 function populateQueryLists() {
@@ -107,7 +116,7 @@ async function executeQuery(queryId, customParams = {}) {
     }
 
     console.log(`Executing query: ${query.text}`);
-    console.log('Custom params:', customParams);  // Ajoutez cette ligne pour le débogage
+    console.log('Custom params:', customParams);
 
     try {
         const response = await fetch('/execute_query/', {
@@ -135,6 +144,7 @@ async function executeQuery(queryId, customParams = {}) {
         } else {
             console.log("No results returned from the query");
         }
+
     } catch (error) {
         console.error('Erreur lors de l\'exécution de la requête:', error);
     }
@@ -144,7 +154,7 @@ function updateMap(data, queryId) {
     console.log("Updating map with data:", data);
 
     // Supprimer les couches et sources existantes
-    ['nodes', 'edges'].forEach(layer => {
+    ['nodes', 'thalwegs'].forEach(layer => {
         if (map.getLayer(layer)) map.removeLayer(layer);
         if (map.getSource(layer)) map.removeSource(layer);
     });
@@ -154,8 +164,7 @@ function updateMap(data, queryId) {
         features: []
     };
 
-    if (queryId === 1 || queryId === 3) {
-        // Pour les nœuds simples
+    if (queryId === 1) {  // Nœuds
         data.forEach(item => {
             geojson.features.push({
                 type: 'Feature',
@@ -173,33 +182,38 @@ function updateMap(data, queryId) {
             type: 'circle',
             source: 'nodes',
             paint: {
-                'circle-radius': 4,
-                'circle-color': queryId === 1 ? 'red' : 'green',
+                'circle-radius': 6,
+                'circle-color': 'red',
                 'circle-stroke-width': 1,
                 'circle-stroke-color': '#fff'
             }
         });
-    } else if (queryId === 2) {
-        // Pour les thalwegs (lignes entre deux points)
+    } else if (queryId === 2) {  // Thalwegs
         data.forEach(item => {
+            // Convertir la géométrie LINESTRING au format GeoJSON
+            const coordinates = item.geometry.match(/-?\d+(\.\d+)?/g).map(Number);
+            const lineCoordinates = [];
+            for (let i = 0; i < coordinates.length; i += 3) {
+                lineCoordinates.push([coordinates[i], coordinates[i+1]]);
+            }
+
             geojson.features.push({
                 type: 'Feature',
                 geometry: {
                     type: 'LineString',
-                    coordinates: [
-                        [parseFloat(item.long1), parseFloat(item.lat1)],
-                        [parseFloat(item.long2), parseFloat(item.lat2)]
-                    ]
+                    coordinates: lineCoordinates
                 },
-                properties: item
+                properties: {
+                    id: item.id
+                }
             });
         });
 
-        map.addSource('edges', { type: 'geojson', data: geojson });
+        map.addSource('thalwegs', { type: 'geojson', data: geojson });
         map.addLayer({
-            id: 'edges',
+            id: 'thalwegs',
             type: 'line',
-            source: 'edges',
+            source: 'thalwegs',
             layout: {
                 'line-join': 'round',
                 'line-cap': 'round'
@@ -228,6 +242,7 @@ function updateMap(data, queryId) {
 
     addPopupInteractions(queryId);
 }
+
 
 function addPopupInteractions(queryId) {
     if (queryId === 1 || queryId === 3) {
@@ -279,7 +294,7 @@ function getCookie(name) {
     let cookieValue = null;
     if (document.cookie && document.cookie !== '') {
         const cookies = document.cookie.split(';');
-        for (let i = 0; i < cookies.length; i++) {
+        for (let i = 0; cookies[i]; i++) {
             const cookie = cookies[i].trim();
             if (cookie.substring(0, name.length + 1) === (name + '=')) {
                 cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
