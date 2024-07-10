@@ -26,7 +26,7 @@ const queries = [
         id: 1, 
         text: "Lister tous les nœuds", 
         type: "interrogation", 
-        cypher: "MATCH (n:Node) RETURN n.id as id, n.longitude as longitude, n.latitude as latitude LIMIT $limit",
+        cypher: "MATCH (n:Node) RETURN n.id as id, n.longitude as longitude, n.latitude as latitude, n.z as altitude LIMIT $limit",
         customizable: true,
         customOptions: [
             { name: 'limit', type: 'number', default: 100, label: 'Nombre de nœuds à afficher' }
@@ -36,7 +36,7 @@ const queries = [
         id: 2, 
         text: "Lister tous les thalwegs", 
         type: "interrogation", 
-        cypher: "MATCH (t:Thalweg) RETURN t.id as id, t.geometry as geometry, t.accumulation as accumulation LIMIT $limit",
+        cypher: "MATCH (t:Thalweg) RETURN t.id as id, t.geometry as geometry, t.accumulation as accumulation, t.slope as slope LIMIT $limit",
         customizable: true,
         customOptions: [
             { name: 'limit', type: 'number', default: 100, label: 'Nombre de thalwegs à afficher' }
@@ -224,7 +224,8 @@ function updateMap(data, queryId) {
                 },
                 properties: {
                     id: thalweg.id,
-                    accumulation: thalweg.accumulation
+                    accumulation: thalweg.accumulation,
+                    slope: thalweg.slope
                 }
             });
 
@@ -306,15 +307,42 @@ function updateMap(data, queryId) {
 }
 
 function addPopupInteractions(queryId) {
-    if (queryId === 1) {
-        // ... (code pour les nœuds inchangé)
+    if (queryId === 1 || queryId === 3) {
+        map.on('click', 'nodes', function(e) {
+            var coordinates = e.features[0].geometry.coordinates.slice();
+            var properties = e.features[0].properties;
+            
+            var description = `<strong>Node</strong><br>
+                               <strong>ID:</strong> ${properties.id}<br>
+                               <strong>Longitude:</strong> ${coordinates[0]}<br>
+                               <strong>Latitude:</strong> ${coordinates[1]}`;             
+            
+            if (properties.altitude !== undefined) {
+                description += `<br><strong>Altitude:</strong> ${properties.altitude}`;
+            }
+
+            new mapboxgl.Popup()
+                .setLngLat(coordinates)
+                .setHTML(description)
+                .addTo(map);
+        });
+
+        map.on('mouseenter', 'nodes', function() {
+            map.getCanvas().style.cursor = 'pointer';
+        });
+
+        map.on('mouseleave', 'nodes', function() {
+            map.getCanvas().style.cursor = '';
+        });
     } else if (queryId === 2) {
+        
         map.on('click', 'thalwegs', function(e) {
             var coordinates = e.lngLat;
             var properties = e.features[0].properties;
             var description = `<strong>Thalweg</strong><br>
                                <strong>ID:</strong> ${properties.id}<br>
-                               <strong>Accumulation:</strong> ${properties.accumulation}`;
+                               <strong>Accumulation:</strong> ${properties.accumulation}<br>
+                               <strong>Pente:</strong> ${properties.slope.toFixed(2)}°`;
             
             new mapboxgl.Popup()
                 .setLngLat(coordinates)

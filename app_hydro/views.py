@@ -64,7 +64,8 @@ def execute_query(request):
                         formatted_result = {
                             "id": record.get('id'),
                             "coordinates": coordinates,
-                            "accumulation": record.get('accumulation')
+                            "accumulation": record.get('accumulation'),
+                            "slope": record.get('slope')
                         }
                         formatted_results.append(formatted_result)
                         print(f"Formatted thalweg: {formatted_result}")
