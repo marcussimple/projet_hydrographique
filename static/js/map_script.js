@@ -42,6 +42,22 @@ const queries = [
             { name: 'limit', type: 'number', default: 100, label: 'Nombre de thalwegs à afficher' }
         ]
     },
+    { 
+        id: 3, 
+        text: "Afficher les nœuds entre deux altitudes", 
+        type: "interrogation", 
+        cypher: `
+        MATCH (t:Node)
+        WITH t, CASE WHEN $X IS NULL THEN 0 ELSE $X END AS minZ, CASE WHEN $Y IS NULL THEN max(t.z) ELSE $Y END AS maxZ
+        WHERE t.z > minZ AND t.z < maxZ
+        RETURN t.id as id, t.longitude as longitude, t.latitude as latitude, t.z as altitude
+        `,
+        customizable: true,
+        customOptions: [
+            { name: 'X', type: 'number', default: null, label: 'Altitude minimale (laisser vide pour 0)' },
+            { name: 'Y', type: 'number', default: null, label: 'Altitude maximale (laisser vide pour max)' }
+        ]
+    },
 ];
 
 function populateQueryLists() {
@@ -89,12 +105,6 @@ function showCustomizationModal(query) {
         modal.style.display = 'none';
     };
 
-    window.onclick = function(event) {
-        if (event.target == modal) {
-            modal.style.display = 'none';
-        }
-    };
-
     document.getElementById('executeCustomQuery').onclick = function() {
         const customParams = {};
         query.customOptions.forEach(option => {
@@ -139,6 +149,7 @@ async function executeQuery(queryId, customParams = {}) {
         console.log("Received data:", data);
 
         if (data.results && data.results.length > 0) {
+            console.log(`Updating map with ${data.results.length} results for query ${queryId}`);
             updateMap(data.results, query.id);
         } else {
             console.log("No results returned from the query");
@@ -152,7 +163,7 @@ function updateMap(data, queryId) {
     console.log("Updating map with data:", data);
 
     // Supprimer les couches et sources existantes
-    ['nodes', 'thalwegs', 'thalweg-points', 'thalweg-endpoints'].forEach(layer => {
+    ['nodes', 'thalwegs', 'thalweg-endpoints'].forEach(layer => {
         if (map.getLayer(layer)) map.removeLayer(layer);
         if (map.getSource(layer)) map.removeSource(layer);
     });
@@ -167,7 +178,7 @@ function updateMap(data, queryId) {
         features: []
     };
 
-    if (queryId === 1) {  // Nœuds
+    if (queryId === 1 || queryId === 3) {   // Nœuds
         data.forEach(item => {
             geojson.features.push({
                 type: 'Feature',
@@ -175,7 +186,10 @@ function updateMap(data, queryId) {
                     type: 'Point',
                     coordinates: [parseFloat(item.longitude), parseFloat(item.latitude)]
                 },
-                properties: item
+                properties: {
+                    id: item.id,
+                    altitude: item.altitude
+                }
             });
         });
 
@@ -185,13 +199,21 @@ function updateMap(data, queryId) {
             type: 'circle',
             source: 'nodes',
             paint: {
-                'circle-radius': 6,
-                'circle-color': 'red',
+                'circle-radius': 3,
+                'circle-color': [
+                    'interpolate',
+                    ['linear'],
+                    ['get', 'altitude'],
+                    0, '#00ff00',  // Vert pour basse altitude
+                    236, '#ffff00',  // Jaune pour altitude moyenne
+                    354, '#ff0000'  // Rouge pour haute altitude
+                ],
                 'circle-stroke-width': 1,
                 'circle-stroke-color': '#fff'
             }
         });
-    } else if (queryId === 2) {  // Thalwegs
+
+    } else if (queryId === 2) {   // Thalwegs
         data.forEach(thalweg => {
             // Ajouter la polyligne complète du thalweg
             geojson.features.push({
@@ -260,7 +282,7 @@ function updateMap(data, queryId) {
                     '#000000'  // Noir par défaut (ne devrait jamais être utilisé)
                 ],
                 'circle-stroke-width': 1,
-                //'circle-stroke-color': '#000'
+                'circle-stroke-color': '#000'
             }
         });
     }
