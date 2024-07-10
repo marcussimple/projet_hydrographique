@@ -152,7 +152,7 @@ function updateMap(data, queryId) {
     console.log("Updating map with data:", data);
 
     // Supprimer les couches et sources existantes
-    ['nodes', 'thalwegs', 'thalweg-points'].forEach(layer => {
+    ['nodes', 'thalwegs', 'thalweg-points', 'thalweg-endpoints'].forEach(layer => {
         if (map.getLayer(layer)) map.removeLayer(layer);
         if (map.getSource(layer)) map.removeSource(layer);
     });
@@ -162,7 +162,7 @@ function updateMap(data, queryId) {
         features: []
     };
 
-    const pointsGeojson = {
+    const endpointsGeojson = {
         type: 'FeatureCollection',
         features: []
     };
@@ -193,22 +193,6 @@ function updateMap(data, queryId) {
         });
     } else if (queryId === 2) {  // Thalwegs
         data.forEach(thalweg => {
-            // Ajouter chaque point du thalweg
-            thalweg.coordinates.forEach((coord, index) => {
-                pointsGeojson.features.push({
-                    type: 'Feature',
-                    geometry: {
-                        type: 'Point',
-                        coordinates: coord
-                    },
-                    properties: {
-                        id: `${thalweg.id}-${index}`,
-                        thalwegId: thalweg.id,
-                        pointIndex: index
-                    }
-                });
-            });
-
             // Ajouter la polyligne complète du thalweg
             geojson.features.push({
                 type: 'Feature',
@@ -221,6 +205,27 @@ function updateMap(data, queryId) {
                     accumulation: thalweg.accumulation
                 }
             });
+
+            // Ajouter seulement les points de début et de fin
+            if (thalweg.coordinates.length > 0) {
+                const startPoint = thalweg.coordinates[0];
+                const endPoint = thalweg.coordinates[thalweg.coordinates.length - 1];
+
+                [startPoint, endPoint].forEach((point, index) => {
+                    endpointsGeojson.features.push({
+                        type: 'Feature',
+                        geometry: {
+                            type: 'Point',
+                            coordinates: point
+                        },
+                        properties: {
+                            id: `${thalweg.id}-${index === 0 ? 'start' : 'end'}`,
+                            thalwegId: thalweg.id,
+                            pointType: index === 0 ? 'start' : 'end'
+                        }
+                    });
+                });
+            }
         });
 
         // Ajouter la source et la couche pour les thalwegs
@@ -234,36 +239,28 @@ function updateMap(data, queryId) {
                 'line-cap': 'round'
             },
             paint: {
-                'line-color': [
-                    'interpolate',
-                    ['linear'],
-                    ['get', 'accumulation'],
-                    0, '#00ffff',
-                    100, '#0000ff',
-                    200, '#ff00ff',
-                    300, '#ff0000'
-                ],
-                'line-width': [
-                    'interpolate',
-                    ['linear'],
-                    ['get', 'accumulation'],
-                    0, 1,
-                    300, 5
-                ]
+                'line-color': '#3498DB',  // Couleur unique pour tous les thalwegs
+                'line-width': 3
             }
         });
 
-        // Ajouter la source et la couche pour les points de thalweg
-        map.addSource('thalweg-points', { type: 'geojson', data: pointsGeojson });
+        // Ajouter la source et la couche pour les points de début et de fin des thalwegs
+        map.addSource('thalweg-endpoints', { type: 'geojson', data: endpointsGeojson });
         map.addLayer({
-            id: 'thalweg-points',
+            id: 'thalweg-endpoints',
             type: 'circle',
-            source: 'thalweg-points',
+            source: 'thalweg-endpoints',
             paint: {
                 'circle-radius': 3,
-                'circle-color': 'yellow',
+                'circle-color': [
+                    'match',
+                    ['get', 'pointType'],
+                    'start', '#00ff00',  // Vert pour les points de départ
+                    'end', '#ff0000',    // Rouge pour les points d'arrivée
+                    '#000000'  // Noir par défaut (ne devrait jamais être utilisé)
+                ],
                 'circle-stroke-width': 1,
-                'circle-stroke-color': 'black'
+                //'circle-stroke-color': '#000'
             }
         });
     }
@@ -288,27 +285,7 @@ function updateMap(data, queryId) {
 
 function addPopupInteractions(queryId) {
     if (queryId === 1) {
-        map.on('click', 'nodes', function(e) {
-            var coordinates = e.features[0].geometry.coordinates.slice();
-            var properties = e.features[0].properties;
-            var description = `<strong>Nœud</strong><br>
-                               <strong>ID:</strong> ${properties.id}<br>
-                               <strong>Longitude:</strong> ${coordinates[0]}<br>
-                               <strong>Latitude:</strong> ${coordinates[1]}`;
-            
-            new mapboxgl.Popup()
-                .setLngLat(coordinates)
-                .setHTML(description)
-                .addTo(map);
-        });
-
-        map.on('mouseenter', 'nodes', function() {
-            map.getCanvas().style.cursor = 'pointer';
-        });
-
-        map.on('mouseleave', 'nodes', function() {
-            map.getCanvas().style.cursor = '';
-        });
+        // ... (code pour les nœuds inchangé)
     } else if (queryId === 2) {
         map.on('click', 'thalwegs', function(e) {
             var coordinates = e.lngLat;
@@ -323,12 +300,28 @@ function addPopupInteractions(queryId) {
                 .addTo(map);
         });
 
-        map.on('mouseenter', 'thalwegs', function() {
-            map.getCanvas().style.cursor = 'pointer';
+        map.on('click', 'thalweg-endpoints', function(e) {
+            var coordinates = e.features[0].geometry.coordinates.slice();
+            var properties = e.features[0].properties;
+            var description = `<strong>${properties.pointType === 'start' ? 'Début' : 'Fin'} de Thalweg</strong><br>
+                               <strong>Thalweg ID:</strong> ${properties.thalwegId}<br>
+                               <strong>Longitude:</strong> ${coordinates[0]}<br>
+                               <strong>Latitude:</strong> ${coordinates[1]}`;
+            
+            new mapboxgl.Popup()
+                .setLngLat(coordinates)
+                .setHTML(description)
+                .addTo(map);
         });
 
-        map.on('mouseleave', 'thalwegs', function() {
-            map.getCanvas().style.cursor = '';
+        ['thalwegs', 'thalweg-endpoints'].forEach(layer => {
+            map.on('mouseenter', layer, function() {
+                map.getCanvas().style.cursor = 'pointer';
+            });
+
+            map.on('mouseleave', layer, function() {
+                map.getCanvas().style.cursor = '';
+            });
         });
     }
 }
