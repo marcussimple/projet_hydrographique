@@ -6,47 +6,53 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Analyse du réseau hydrographique Kinonge</title>
     <script src='https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.js'></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.7.5/proj4.js"></script>
     <link href='https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.css' rel='stylesheet' />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
 </head>
 <body>
-    <div id="header">Analyse du réseau hydrographique Kinonge</div>
+    <div id="header">
+        Analyse de réseau hydrographique
+    </div>
+
     <div id="content">
         <div id="left-panel">
             <div class="query-type" data-type="interrogation">
-                <i class="fas fa-search"></i> Interrogation
+                Interrogation
             </div>
-            <ul id="interrogation-list" class="query-list" style="display: none;">
-                <!-- Les éléments de la liste seront ajoutés ici par JavaScript -->
-            </ul>
-            
+            <ul id="interrogation-list" class="query-list" style="display: none;"></ul>
+
             <div class="query-type" data-type="validation">
-                <i class="fas fa-check-circle"></i> Validation
+                Validation
             </div>
-            <ul id="validation-list" class="query-list" style="display: none;">
-                <!-- Les éléments de la liste seront ajoutés ici par JavaScript -->
-            </ul>
-            
+            <ul id="validation-list" class="query-list" style="display: none;"></ul>
+
             <div class="query-type" data-type="statistique">
-                <i class="fas fa-chart-bar"></i> Calcul Statistique
+                Calcul Statistique
             </div>
-            <ul id="statistique-list" class="query-list" style="display: none;">
-                <!-- Les éléments de la liste seront ajoutés ici par JavaScript -->
-            </ul>
+            <ul id="statistique-list" class="query-list" style="display: none;"></ul>
         </div>
+
         <div id="map"></div>
     </div>
 
     <div id="customizationModal" class="modal">
         <div class="modal-content">
             <span class="close">&times;</span>
-            <h2>Personnaliser la requête</h2>
             <div id="customizationOptions"></div>
             <button id="executeCustomQuery">Exécuter</button>
         </div>
     </div>
-    
+
+    <div id="validationModal" class="modal">
+        <div class="modal-content">
+            <h2>Options de validation</h2>
+            <button id="showUpstream">Afficher les thalwegs en amont</button>
+            <button id="showDownstream">Afficher les thalwegs en aval</button>
+        </div>
+    </div>
+
     {% csrf_token %}
     <script src="{% static 'js/map_script.js' %}"></script>
 </body>

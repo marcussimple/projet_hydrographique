@@ -35,17 +35,17 @@ def execute_query(request):
         print(f"Received query: {cypher}")
         print(f"Received params: {params}")
         
+        # Conversion des paramètres
+        for key, value in params.items():
+            if value == '':
+                params[key] = None
+            elif key == 'limit':
+                params[key] = int(value) if value is not None else None
+            elif key in ['X', 'Y']:
+                params[key] = float(value) if value is not None else None
+        
         with driver.session(database=NEO4J_DATABASE) as session:
             try:
-                # Convertir les paramètres en types appropriés
-                for key, value in params.items():
-                    if value == '':
-                        params[key] = None
-                    elif key == 'limit':
-                        params[key] = int(value) if value is not None else None
-                    elif key in ['X', 'Y']:
-                        params[key] = float(value) if value is not None else None
-                
                 result = session.run(cypher, params)
                 records = result.data()
                 
@@ -54,7 +54,7 @@ def execute_query(request):
                         "id": record.get('id'),
                         "longitude": record.get('longitude'),
                         "latitude": record.get('latitude'),
-                        "altitude": record.get('altitude')  # Ajouté pour la requête 3
+                        "altitude": record.get('altitude')
                     } for record in records]
                 elif query_id == 2:  # Thalwegs
                     formatted_results = []
@@ -68,7 +68,8 @@ def execute_query(request):
                             "slope": record.get('slope')
                         }
                         formatted_results.append(formatted_result)
-                        print(f"Formatted thalweg: {formatted_result}")
+                elif query_id in [4, 5]:  # Thalwegs en amont ou en aval
+                    formatted_results = format_upstream_downstream_results(records)
                 else:
                     formatted_results = records
                 
@@ -95,3 +96,17 @@ def log_detailed_results(records):
                 print(f"Relationship: {rel}")
                 print(f"Start node: {rel.start_node}")
                 print(f"End node: {rel.end_node}")
+
+
+def format_upstream_downstream_results(records):
+    formatted_results = []
+    for record in records:
+        coordinates = parse_linestring(record['upstreamGeometry'])
+        formatted_result = {
+            "upstreamId": record['upstreamId'],
+            "depth": record['depth'],
+            "valleyId": record['valleyId'],
+            "coordinates": coordinates
+        }
+        formatted_results.append(formatted_result)
+    return formatted_results
