@@ -141,17 +141,19 @@ def log_detailed_results(records):
 def format_upstream_downstream_results(records):
     formatted_results = []
     for record in records:
-        coordinates = parse_linestring(record['upstreamGeometry'])
-        if coordinates:  # Vérifier que les coordonnées ne sont pas vides
+        geometry_key = 'upstreamGeometry' if 'upstreamGeometry' in record else 'downstreamGeometry'
+        id_key = 'upstreamId' if 'upstreamId' in record else 'downstreamId'
+        coordinates = parse_linestring(record[geometry_key])
+        if coordinates:
             formatted_result = {
-                "upstreamId": record['upstreamId'],
+                id_key: record[id_key],
                 "depth": record['depth'],
                 "valleyId": record['valleyId'],
                 "coordinates": coordinates
             }
             formatted_results.append(formatted_result)
         else:
-            print(f"Warning: Empty coordinates for thalweg {record['upstreamId']}")
+            logger.warning(f"Empty coordinates for thalweg {record[id_key]}")
     
-    print(f"Formatted {len(formatted_results)} upstream thalwegs")
+    logger.info(f"Formatted {len(formatted_results)} thalwegs")
     return formatted_results
