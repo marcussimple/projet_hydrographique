@@ -155,6 +155,22 @@ function setupEventListeners() {
         });
     });
 
+    document.getElementById('showUpstream').addEventListener('click', function() {
+        if (selectedThalwegId) {
+            executeQuery(4, { thalwegId: selectedThalwegId });
+        } else {
+            showMessage("Veuillez d'abord sélectionner un thalweg sur la carte.");
+        }
+    });
+
+    document.getElementById('showDownstream').addEventListener('click', function() {
+        if (selectedThalwegId) {
+            executeQuery(5, { thalwegId: selectedThalwegId });
+        } else {
+            showMessage("Veuillez d'abord sélectionner un thalweg sur la carte.");
+        }
+    });
+
     setupThalwegSelection();
 }
 
@@ -167,22 +183,54 @@ function toggleQueryList(type) {
 
 function setupThalwegSelection() {
     map.on('click', 'thalwegs', function(e) {
-        if (!e.features.length) {
-            console.log("No feature found at click location");
-            return;
-        }
         const thalwegId = e.features[0].properties.id;
         selectedThalwegId = thalwegId;
+        
+        updateSelectedThalwegInfo(e.features[0].properties);
         
         map.setPaintProperty('thalwegs', 'line-color', [
             'case',
             ['==', ['get', 'id'], selectedThalwegId],
-            '#FF0000',
-            '#3498DB'
+            '#FF0000',  // Rouge pour le thalweg sélectionné
+            '#3498DB'   // Bleu pour les autres thalwegs
         ]);
-
-        showValidationOptions(thalwegId);
     });
+}
+
+function updateSelectedThalwegInfo(properties) {
+    const infoDiv = document.getElementById('selected-thalweg-info');
+    infoDiv.innerHTML = `
+        <p><strong>ID:</strong> ${properties.id}</p>
+        <p><strong>Accumulation:</strong> ${properties.accumulation}</p>
+        <p><strong>Pente:</strong> ${properties.slope.toFixed(2)}°</p>
+    `;
+}
+
+function updateUpstreamThalwegsInfo(thalwegs) {
+    const infoDiv = document.getElementById('upstream-thalwegs-info');
+    infoDiv.innerHTML = thalwegs.map(thalweg => `
+        <p><strong>ID:</strong> ${thalweg.upstreamId}, <strong>Profondeur:</strong> ${thalweg.depth}</p>
+    `).join('');
+}
+
+function showMessage(message) {
+    const alertContainer = document.createElement('div');
+    alertContainer.style.position = 'absolute';
+    alertContainer.style.top = '20px';
+    alertContainer.style.left = '50%';
+    alertContainer.style.transform = 'translateX(-50%)';
+    alertContainer.style.backgroundColor = 'white';
+    alertContainer.style.padding = '10px';
+    alertContainer.style.borderRadius = '5px';
+    alertContainer.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+    alertContainer.style.zIndex = '1000';
+    alertContainer.innerHTML = message;
+
+    document.body.appendChild(alertContainer);
+
+    setTimeout(() => {
+        document.body.removeChild(alertContainer);
+    }, 3000);
 }
 
 async function executeQuery(queryId, customParams = {}) {
@@ -394,6 +442,8 @@ function updateMap(data, queryId) {
                 'circle-stroke-color': '#000'
             }
         });
+
+        updateUpstreamThalwegsInfo(data);
     }
 
     

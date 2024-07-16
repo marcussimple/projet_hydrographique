@@ -12,29 +12,31 @@
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
 </head>
 <body>
-    <div id="header">
-        Analyse de réseau hydrographique
-    </div>
+    <div id="header">Analyse de réseau hydrographique</div>
 
     <div id="content">
         <div id="left-panel">
-            <div class="query-type" data-type="interrogation">
-                Interrogation
-            </div>
+            <div class="query-type" data-type="interrogation">Interrogation</div>
             <ul id="interrogation-list" class="query-list" style="display: none;"></ul>
 
-            <div class="query-type" data-type="validation">
-                Validation
-            </div>
-            <ul id="validation-list" class="query-list" style="display: none;"></ul>
+            <div class="query-type" data-type="validation">Validation</div>
+            <ul id="validation-list" class="query-list" style="display: none;">
+                <li id="showUpstream">Afficher les thalwegs en amont</li>
+                <li id="showDownstream">Afficher les thalwegs en aval</li>
+            </ul>
 
-            <div class="query-type" data-type="statistique">
-                Calcul Statistique
-            </div>
+            <div class="query-type" data-type="statistique">Calcul Statistique</div>
             <ul id="statistique-list" class="query-list" style="display: none;"></ul>
         </div>
 
         <div id="map"></div>
+
+        <div id="right-panel">
+            <h3>Informations du thalweg</h3>
+            <div id="selected-thalweg-info"></div>
+            <h3>Thalwegs en amont</h3>
+            <div id="upstream-thalwegs-info"></div>
+        </div>
     </div>
 
     <div id="customizationModal" class="modal">
@@ -42,14 +44,6 @@
             <span class="close">&times;</span>
             <div id="customizationOptions"></div>
             <button id="executeCustomQuery">Exécuter</button>
-        </div>
-    </div>
-
-    <div id="validationModal" class="modal">
-        <div class="modal-content">
-            <h2>Options de validation</h2>
-            <button id="showUpstream">Afficher les thalwegs en amont</button>
-            <button id="showDownstream">Afficher les thalwegs en aval</button>
         </div>
     </div>
 
