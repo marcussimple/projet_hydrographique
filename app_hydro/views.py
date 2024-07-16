@@ -4,6 +4,7 @@ from django.views.decorators.csrf import csrf_exempt
 import json
 from neo4j import GraphDatabase
 import re
+import logging
 
 # Configuration de la connexion Neo4j
 NEO4J_URI = "bolt://localhost:7687"
@@ -11,7 +12,12 @@ NEO4J_USER = "neo4j"
 NEO4J_PASSWORD = "password"  # Remplacez par votre mot de passe réel
 NEO4J_DATABASE = "hydronetwork"
 
+
 driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+
+# Configurez le logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 def index(request):
     return render(request, 'index.html')
@@ -22,7 +28,26 @@ def parse_linestring(geometry_string):
         coordinates_str = coordinates_match.group(1)
         points = coordinates_str.split(', ')
         return [[float(point.split()[0]), float(point.split()[1])] for point in points]
+    logger.warning(f"Could not parse geometry string: {geometry_string}")
     return []
+
+def format_upstream_downstream_results(records):
+    formatted_results = []
+    for record in records:
+        coordinates = parse_linestring(record['upstreamGeometry'])
+        if coordinates:
+            formatted_result = {
+                "upstreamId": record['upstreamId'],
+                "depth": record['depth'],
+                "valleyId": record['valleyId'],
+                "coordinates": coordinates
+            }
+            formatted_results.append(formatted_result)
+        else:
+            logger.warning(f"Empty coordinates for thalweg {record['upstreamId']}")
+    
+    logger.info(f"Formatted {len(formatted_results)} upstream thalwegs")
+    return formatted_results
 
 @csrf_exempt
 def execute_query(request):
@@ -34,6 +59,9 @@ def execute_query(request):
         
         print(f"Received query: {cypher}")
         print(f"Received params: {params}")
+
+        logger.info(f"Received query: {cypher}")
+        logger.info(f"Received params: {params}")
         
         # Conversion des paramètres
         for key, value in params.items():
@@ -48,6 +76,10 @@ def execute_query(request):
             try:
                 result = session.run(cypher, params)
                 records = result.data()
+
+                logger.info(f"Raw records count: {len(records)}")
+
+                print(f"Raw records count: {len(records)}")
                 
                 if query_id in [1, 3]:  # Nœuds
                     formatted_results = [{
@@ -61,24 +93,32 @@ def execute_query(request):
                     for record in records:
                         geometry = record.get('geometry')
                         coordinates = parse_linestring(geometry)
-                        formatted_result = {
-                            "id": record.get('id'),
-                            "coordinates": coordinates,
-                            "accumulation": record.get('accumulation'),
-                            "slope": record.get('slope')
-                        }
-                        formatted_results.append(formatted_result)
+                        if coordinates:
+                            formatted_result = {
+                                "id": record.get('id'),
+                                "coordinates": coordinates,
+                                "accumulation": record.get('accumulation'),
+                                "slope": record.get('slope')
+                            }
+                            formatted_results.append(formatted_result)
+                        else:
+                            print(f"Warning: Empty coordinates for thalweg {record.get('id')}")
+
                 elif query_id in [4, 5]:  # Thalwegs en amont ou en aval
                     formatted_results = format_upstream_downstream_results(records)
                 else:
                     formatted_results = records
                 
-                print(f"Number of results: {len(formatted_results)}")
+                print(f"Number of formatted results: {len(formatted_results)}")
                 print(f"Sample of formatted results: {formatted_results[:5]}")
+
+                logger.info(f"Number of formatted results: {len(formatted_results)}")
+                logger.debug(f"Formatted results: {formatted_results}")
                 
                 return JsonResponse({"results": formatted_results})
             except Exception as e:
                 print(f"Error executing query: {str(e)}")
+                logger.error(f"Error executing query: {str(e)}", exc_info=True)
                 return JsonResponse({"error": str(e)}, status=500)
     
     return JsonResponse({"error": "Method not allowed"}, status=405)
@@ -102,11 +142,16 @@ def format_upstream_downstream_results(records):
     formatted_results = []
     for record in records:
         coordinates = parse_linestring(record['upstreamGeometry'])
-        formatted_result = {
-            "upstreamId": record['upstreamId'],
-            "depth": record['depth'],
-            "valleyId": record['valleyId'],
-            "coordinates": coordinates
-        }
-        formatted_results.append(formatted_result)
+        if coordinates:  # Vérifier que les coordonnées ne sont pas vides
+            formatted_result = {
+                "upstreamId": record['upstreamId'],
+                "depth": record['depth'],
+                "valleyId": record['valleyId'],
+                "coordinates": coordinates
+            }
+            formatted_results.append(formatted_result)
+        else:
+            print(f"Warning: Empty coordinates for thalweg {record['upstreamId']}")
+    
+    print(f"Formatted {len(formatted_results)} upstream thalwegs")
     return formatted_results

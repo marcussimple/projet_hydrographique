@@ -29,7 +29,8 @@ body {
 
 #map {
     flex: 1;
-    height: 100%; /* Assurez-vous que la carte prend toute la hauteur disponible */
+    height: 500%; /* Assurez-vous que la carte prend toute la hauteur disponible */
+    width: 100%;
 }
 
 .query-type {

@@ -1,24 +1,7 @@
 // Initialisation de Mapbox
 mapboxgl.accessToken = 'pk.eyJ1IjoibWFyY3Vzc2ltcGxlIiwiYSI6ImNseTNvb3hobzA5cWsybHBvenRmdHNxcmwifQ.ZQAMdmO7CT--DCeE1pLF_g';
 var map;
-
-document.addEventListener('DOMContentLoaded', function() {
-    console.log("DOM fully loaded");
-    
-    // Initialisation de la carte
-    map = new mapboxgl.Map({
-        container: 'map',
-        style: 'mapbox://styles/mapbox/streets-v11',
-        center: [-74.82608900230738, 45.76895453076196],
-        zoom: 10
-    });
-
-    map.on('load', function() {
-        console.log("Map loaded");
-        setupEventListeners();
-        populateQueryLists();
-    });
-});
+let selectedThalwegId = null;
 
 // Liste des requêtes
 const queries = [
@@ -67,31 +50,24 @@ const queries = [
     },
 ];
 
-//fonction pour gérer la sélection des thalwegs
-function setupThalwegSelection() {
-    map.on('click', 'thalwegs', function(e) {
-        const thalwegId = e.features[0].properties.id;
-        showValidationOptions(thalwegId);
+document.addEventListener('DOMContentLoaded', function() {
+    console.log("DOM fully loaded");
+    initializeMap();
+});
+
+function initializeMap() {
+    map = new mapboxgl.Map({
+        container: 'map',
+        style: 'mapbox://styles/mapbox/streets-v11',
+        center: [-74.82608900230738, 45.76895453076196],
+        zoom: 10
     });
-}
 
-// Ajoutez cette fonction pour afficher les options de validation
-function showValidationOptions(thalwegId) {
-    const modal = document.getElementById('validationModal');
-    const upstreamButton = document.getElementById('showUpstream');
-    const downstreamButton = document.getElementById('showDownstream');
-
-    upstreamButton.onclick = function() {
-        executeQuery(4, { thalwegId: thalwegId });
-        modal.style.display = 'none';
-    };
-
-    downstreamButton.onclick = function() {
-        executeQuery(5, { thalwegId: thalwegId });
-        modal.style.display = 'none';
-    };
-
-    modal.style.display = 'block';
+    map.on('load', function() {
+        console.log("Map loaded");
+        setupEventListeners();
+        populateQueryLists();
+    });
 }
 
 function populateQueryLists() {
@@ -151,6 +127,64 @@ function showCustomizationModal(query) {
     };
 }
 
+function showValidationOptions(thalwegId) {
+    const modal = document.getElementById('validationModal');
+    const upstreamButton = document.getElementById('showUpstream');
+    const downstreamButton = document.getElementById('showDownstream');
+
+    upstreamButton.onclick = function() {
+        executeQuery(4, { thalwegId: thalwegId });
+        modal.style.display = 'none';
+    };
+
+    downstreamButton.onclick = function() {
+        executeQuery(5, { thalwegId: thalwegId });
+        modal.style.display = 'none';
+    };
+
+    modal.style.display = 'block';
+}
+
+
+function setupEventListeners() {
+    document.querySelectorAll('.query-type').forEach(element => {
+        element.addEventListener('click', function() {
+            const type = this.getAttribute('data-type');
+            console.log(`Clicked on query type: ${type}`);
+            toggleQueryList(type);
+        });
+    });
+
+    setupThalwegSelection();
+}
+
+function toggleQueryList(type) {
+    const list = document.getElementById(`${type}-list`);
+    if (list) {
+        list.style.display = list.style.display === 'none' || list.style.display === '' ? 'block' : 'none';
+    }
+}
+
+function setupThalwegSelection() {
+    map.on('click', 'thalwegs', function(e) {
+        if (!e.features.length) {
+            console.log("No feature found at click location");
+            return;
+        }
+        const thalwegId = e.features[0].properties.id;
+        selectedThalwegId = thalwegId;
+        
+        map.setPaintProperty('thalwegs', 'line-color', [
+            'case',
+            ['==', ['get', 'id'], selectedThalwegId],
+            '#FF0000',
+            '#3498DB'
+        ]);
+
+        showValidationOptions(thalwegId);
+    });
+}
+
 async function executeQuery(queryId, customParams = {}) {
     const query = queries.find(q => q.id === queryId);
     if (!query) {
@@ -161,7 +195,6 @@ async function executeQuery(queryId, customParams = {}) {
     console.log(`Executing query: ${query.text}`);
     console.log('Custom params:', customParams);
 
-    // Conversion des paramètres
     const convertedParams = {};
     for (const [key, value] of Object.entries(customParams)) {
         if (value === '') {
@@ -198,14 +231,19 @@ async function executeQuery(queryId, customParams = {}) {
 
         if (data.results && data.results.length > 0) {
             console.log(`Updating map with ${data.results.length} results for query ${queryId}`);
-            updateMap(data.results, queryId);  // Assurez-vous que queryId est passé ici
+            updateMap(data.results, queryId);
         } else {
             console.log("No results returned from the query");
+            if (queryId === 4) {
+                showNoUpstreamMessage();
+            }
         }
     } catch (error) {
         console.error('Erreur lors de l\'exécution de la requête:', error);
     }
 }
+
+//----------------------------------------------------------------------------- UPDATE MAP ------------------------------------------------------------
 
 function updateMap(data, queryId) {
     console.log("Updating map with data:", data);
@@ -235,29 +273,22 @@ function updateMap(data, queryId) {
             });
         });
 
-        if (!map.getSource('nodes')) {
-            map.addSource('nodes', { type: 'geojson', data: geojson });
-            map.addLayer({
-                id: 'nodes',
-                type: 'circle',
-                source: 'nodes',
-                paint: {
-                    'circle-radius': 3,
-                    'circle-color': [
-                        'interpolate',
-                        ['linear'],
-                        ['get', 'altitude'],
-                        0, '#00ff00',
-                        236, '#ffff00',
-                        354, '#ff0000'
-                    ],
-                    'circle-stroke-width': 1,
-                    'circle-stroke-color': '#fff'
-                }
-            });
-        } else {
-            map.getSource('nodes').setData(geojson);
-        }
+        updateLayer('nodes', geojson, {
+            type: 'circle',
+            paint: {
+                'circle-radius': 3,
+                'circle-color': [
+                    'interpolate',
+                    ['linear'],
+                    ['get', 'altitude'],
+                    0, '#00ff00',
+                    236, '#ffff00',
+                    354, '#ff0000'
+                ],
+                'circle-stroke-width': 1,
+                'circle-stroke-color': '#fff'
+            }
+        });
     } else if (queryId === 2) {   // Thalwegs initiaux
         data.forEach(thalweg => {
             geojson.features.push({
@@ -273,71 +304,57 @@ function updateMap(data, queryId) {
                 }
             });
 
-            // Ajouter les points de début et de fin
-            if (thalweg.coordinates.length > 0) {
-                const startPoint = thalweg.coordinates[0];
-                const endPoint = thalweg.coordinates[thalweg.coordinates.length - 1];
+            addEndpoints(thalweg, endpointsGeojson);
+        });
 
-                [startPoint, endPoint].forEach((point, index) => {
-                    endpointsGeojson.features.push({
-                        type: 'Feature',
-                        geometry: {
-                            type: 'Point',
-                            coordinates: point
-                        },
-                        properties: {
-                            id: `${thalweg.id}-${index === 0 ? 'start' : 'end'}`,
-                            thalwegId: thalweg.id,
-                            pointType: index === 0 ? 'start' : 'end'
-                        }
-                    });
-                });
+        updateLayer('thalwegs', geojson, {
+            type: 'line',
+            layout: {
+                'line-join': 'round',
+                'line-cap': 'round'
+            },
+            paint: {
+                'line-color': [
+                    'case',
+                    ['==', ['get', 'id'], selectedThalwegId],
+                    '#FF0000',  // Rouge pour le thalweg sélectionné
+                    '#3498DB'   // Bleu pour les autres thalwegs
+                ],
+                'line-width': 3
             }
         });
 
-        if (!map.getSource('thalwegs')) {
-            map.addSource('thalwegs', { type: 'geojson', data: geojson });
-            map.addLayer({
-                id: 'thalwegs',
-                type: 'line',
-                source: 'thalwegs',
-                layout: {
-                    'line-join': 'round',
-                    'line-cap': 'round'
-                },
-                paint: {
-                    'line-color': '#3498DB',
-                    'line-width': 3
-                }
-            });
-        } else {
-            map.getSource('thalwegs').setData(geojson);
-        }
+        updateLayer('thalweg-endpoints', endpointsGeojson, {
+            type: 'circle',
+            paint: {
+                'circle-radius': 3,
+                'circle-color': '#000000',
+                'circle-stroke-width': 1,
+                'circle-stroke-color': '#000'
+            }
+        });
+    }else if (queryId === 4) {   // Thalwegs en amont
+        console.log(`Processing ${data.length} upstream thalwegs`);
+        const processedThalwegs = new Map();
 
-        if (!map.getSource('thalweg-endpoints')) {
-            map.addSource('thalweg-endpoints', { type: 'geojson', data: endpointsGeojson });
-            map.addLayer({
-                id: 'thalweg-endpoints',
-                type: 'circle',
-                source: 'thalweg-endpoints',
-                paint: {
-                    'circle-radius': 3,
-                    'circle-color': [
-                        'match',
-                        ['get', 'pointType'],
-                        'start', '#000000',
-                        'end', '#000000',
-                        '#000000'
-                    ],
-                    'circle-stroke-width': 1,
-                    'circle-stroke-color': '#000'
-                }
-            });
-        } else {
-            map.getSource('thalweg-endpoints').setData(endpointsGeojson);
-        }
-    } else if (queryId === 4) {   // Thalwegs en amont
-        data.forEach(thalweg => {
+        data.forEach((thalweg, index) => {
+            console.log(`Processing upstream thalweg ${index + 1}:`, thalweg);
+            if (!thalweg.coordinates || thalweg.coordinates.length === 0) {
+                console.warn(`Thalweg ${thalweg.upstreamId} has no coordinates`);
+                return;
+            }
+
+            const thalwegId = String(thalweg.upstreamId);
+            
+            // Si le thalweg n'a pas encore été traité ou si les nouvelles coordonnées sont géographiques
+            if (!processedThalwegs.has(thalwegId) || 
+                (thalweg.coordinates[0][0] > -180 && thalweg.coordinates[0][0] < 0)) {
+                
+                processedThalwegs.set(thalwegId, thalweg);
+            }
+        });
+
+        processedThalwegs.forEach((thalweg, id) => {
             geojson.features.push({
                 type: 'Feature',
                 geometry: {
@@ -345,73 +362,84 @@ function updateMap(data, queryId) {
                     coordinates: thalweg.coordinates
                 },
                 properties: {
-                    id: thalweg.upstreamId,
+                    id: id,
                     depth: thalweg.depth,
                     valleyId: thalweg.valleyId
                 }
             });
 
-            // Ajouter les points de début et de fin pour les thalwegs en amont
-            if (thalweg.coordinates.length > 0) {
-                const startPoint = thalweg.coordinates[0];
-                const endPoint = thalweg.coordinates[thalweg.coordinates.length - 1];
+            addEndpoints(thalweg, endpointsGeojson, true);
+        });
 
-                [startPoint, endPoint].forEach((point, index) => {
-                    endpointsGeojson.features.push({
-                        type: 'Feature',
-                        geometry: {
-                            type: 'Point',
-                            coordinates: point
-                        },
-                        properties: {
-                            id: `${thalweg.upstreamId}-${index === 0 ? 'start' : 'end'}`,
-                            thalwegId: thalweg.upstreamId,
-                            pointType: index === 0 ? 'start' : 'end',
-                            isUpstream: true
-                        }
-                    });
-                });
+        console.log(`Added ${geojson.features.length} unique upstream thalwegs to the map`);
+
+        updateLayer('upstream-thalwegs', geojson, {
+            type: 'line',
+            layout: {
+                'line-join': 'round',
+                'line-cap': 'round'
+            },
+            paint: {
+                'line-color': '#00FF00',
+                'line-width': 3
             }
         });
 
-        if (!map.getSource('upstream-thalwegs')) {
-            map.addSource('upstream-thalwegs', { type: 'geojson', data: geojson });
-            map.addLayer({
-                id: 'upstream-thalwegs',
-                type: 'line',
-                source: 'upstream-thalwegs',
-                layout: {
-                    'line-join': 'round',
-                    'line-cap': 'round'
-                },
-                paint: {
-                    'line-color': '#00FF00',
-                    'line-width': 3
-                }
-            });
-        } else {
-            map.getSource('upstream-thalwegs').setData(geojson);
-        }
-
-        if (!map.getSource('upstream-thalweg-endpoints')) {
-            map.addSource('upstream-thalweg-endpoints', { type: 'geojson', data: endpointsGeojson });
-            map.addLayer({
-                id: 'upstream-thalweg-endpoints',
-                type: 'circle',
-                source: 'upstream-thalweg-endpoints',
-                paint: {
-                    'circle-radius': 3,
-                    'circle-color': '#00FF00',
-                    'circle-stroke-width': 1,
-                    'circle-stroke-color': '#000'
-                }
-            });
-        } else {
-            map.getSource('upstream-thalweg-endpoints').setData(endpointsGeojson);
-        }
+        updateLayer('upstream-thalweg-endpoints', endpointsGeojson, {
+            type: 'circle',
+            paint: {
+                'circle-radius': 3,
+                'circle-color': '#00FF00',
+                'circle-stroke-width': 1,
+                'circle-stroke-color': '#000'
+            }
+        });
     }
 
-    // Ajuster la vue de la carte seulement si c'est une nouvelle requête
+    
+    fitMapToFeatures(geojson);
+    addPopupInteractions();
+
+}
+
+function updateLayer(layerId, geojsonData, layerOptions) {
+    if (!map.getSource(layerId)) {
+        map.addSource(layerId, {
+            type: 'geojson',
+            data: geojsonData
+        });
+        map.addLayer({
+            id: layerId,
+            source: layerId,
+            ...layerOptions
+        });
+    } else {
+        map.getSource(layerId).setData(geojsonData);
+    }
+}
+
+function addEndpoints(thalweg, endpointsGeojson, isUpstream = false) {
+    const startPoint = thalweg.coordinates[0];
+    const endPoint = thalweg.coordinates[thalweg.coordinates.length - 1];
+    
+    [startPoint, endPoint].forEach((point, index) => {
+        endpointsGeojson.features.push({
+            type: 'Feature',
+            geometry: {
+                type: 'Point',
+                coordinates: point
+            },
+            properties: {
+                id: `${thalweg.upstreamId}-${index === 0 ? 'start' : 'end'}`,
+                thalwegId: thalweg.upstreamId,
+                pointType: index === 0 ? 'start' : 'end',
+                isUpstream: isUpstream
+            }
+        });
+    });
+}
+
+function fitMapToFeatures(geojson) {
     if (geojson.features.length > 0) {
         const bounds = new mapboxgl.LngLatBounds();
         geojson.features.forEach(feature => {
@@ -425,46 +453,21 @@ function updateMap(data, queryId) {
         });
         map.fitBounds(bounds, { padding: 50 });
     }
-
-    addPopupInteractions(queryId);
 }
 
-function addPopupInteractions(queryId) {
+function addPopupInteractions() {
     const layers = ['nodes', 'thalwegs', 'upstream-thalwegs', 'thalweg-endpoints', 'upstream-thalweg-endpoints'];
     
     layers.forEach(layer => {
         if (map.getLayer(layer)) {
             map.off('click', layer);
             map.on('click', layer, function(e) {
-                var coordinates = e.features[0].geometry.coordinates.slice();
-                var properties = e.features[0].properties;
-                var description = '';
-
-                if (layer === 'nodes') {
-                    description = `<strong>Node</strong><br>
-                                   <strong>ID:</strong> ${properties.id}<br>
-                                   <strong>Longitude:</strong> ${coordinates[0]}<br>
-                                   <strong>Latitude:</strong> ${coordinates[1]}<br>
-                                   <strong>Altitude:</strong> ${properties.altitude}`;
-                } else if (layer === 'thalwegs' || layer === 'upstream-thalwegs') {
-                    description = `<strong>Thalweg</strong><br>
-                                   <strong>ID:</strong> ${properties.id}<br>`;
-                    if (properties.accumulation !== undefined) {
-                        description += `<strong>Accumulation:</strong> ${properties.accumulation}<br>
-                                        <strong>Pente:</strong> ${properties.slope.toFixed(2)}°`;
-                    } else if (properties.depth !== undefined) {
-                        description += `<strong>Profondeur:</strong> ${properties.depth}<br>
-                                        <strong>ID Vallée:</strong> ${properties.valleyId}`;
-                    }
-                } else if (layer === 'thalweg-endpoints' || layer === 'upstream-thalweg-endpoints') {
-                    description = `<strong>${properties.pointType === 'start' ? 'Début' : 'Fin'} de Thalweg</strong><br>
-                                   <strong>Thalweg ID:</strong> ${properties.thalwegId}<br>
-                                   <strong>Longitude:</strong> ${coordinates[0]}<br>
-                                   <strong>Latitude:</strong> ${coordinates[1]}`;
-                    if (properties.isUpstream) {
-                        description += '<br><strong>Thalweg en amont</strong>';
-                    }
-                }
+                const feature = e.features[0];
+                const coordinates = feature.geometry.type === 'Point' ? 
+                    feature.geometry.coordinates.slice() :
+                    e.lngLat;
+                
+                let description = createPopupContent(feature, layer);
 
                 new mapboxgl.Popup()
                     .setLngLat(coordinates)
@@ -483,14 +486,44 @@ function addPopupInteractions(queryId) {
     });
 }
 
-function parseLineStringZ(geometryString) {
-    const coords = geometryString.match(/\(([^)]+)\)/)[1].split(',').map(coord => {
-        const [lon, lat, z] = coord.trim().split(' ').map(Number);
-        return [lon, lat];  // Nous ignorons la valeur Z pour l'affichage 2D
-    });
-    return coords;
-}
+function createPopupContent(feature, layer) {
+    const properties = feature.properties;
+    let description = '';
 
+    switch(layer) {
+        case 'nodes':
+            description = `<strong>Node</strong><br>
+                           <strong>ID:</strong> ${properties.id}<br>
+                           <strong>Longitude:</strong> ${feature.geometry.coordinates[0]}<br>
+                           <strong>Latitude:</strong> ${feature.geometry.coordinates[1]}<br>
+                           <strong>Altitude:</strong> ${properties.altitude}`;
+            break;
+        case 'thalwegs':
+        case 'upstream-thalwegs':
+            description = `<strong>Thalweg</strong><br>
+                           <strong>ID:</strong> ${properties.id}<br>`;
+            if (properties.accumulation !== undefined) {
+                description += `<strong>Accumulation:</strong> ${properties.accumulation}<br>
+                                <strong>Pente:</strong> ${properties.slope.toFixed(2)}°`;
+            } else if (properties.depth !== undefined) {
+                description += `<strong>Profondeur:</strong> ${properties.depth}<br>
+                                <strong>ID Vallée:</strong> ${properties.valleyId}`;
+            }
+            break;
+        case 'thalweg-endpoints':
+        case 'upstream-thalweg-endpoints':
+            description = `<strong>${properties.pointType === 'start' ? 'Début' : 'Fin'} de Thalweg</strong><br>
+                           <strong>Thalweg ID:</strong> ${properties.thalwegId}<br>
+                           <strong>Longitude:</strong> ${feature.geometry.coordinates[0]}<br>
+                           <strong>Latitude:</strong> ${feature.geometry.coordinates[1]}`;
+            if (properties.isUpstream) {
+                description += '<br><strong>Thalweg en amont</strong>';
+            }
+            break;
+    }
+
+    return description;
+}
 
 function getCookie(name) {
     let cookieValue = null;
@@ -507,22 +540,22 @@ function getCookie(name) {
     return cookieValue;
 }
 
-function setupEventListeners() {
-    document.querySelectorAll('.query-type').forEach(element => {
-        element.addEventListener('click', function() {
-            const type = this.getAttribute('data-type');
-            console.log(`Clicked on query type: ${type}`);
-            toggleQueryList(type);
-        });
-    });
+function showNoUpstreamMessage() {
+    const alertContainer = document.createElement('div');
+    alertContainer.style.position = 'absolute';
+    alertContainer.style.top = '20px';
+    alertContainer.style.left = '50%';
+    alertContainer.style.transform = 'translateX(-50%)';
+    alertContainer.style.backgroundColor = 'white';
+    alertContainer.style.padding = '10px';
+    alertContainer.style.borderRadius = '5px';
+    alertContainer.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+    alertContainer.style.zIndex = '1000';
+    alertContainer.innerHTML = 'Aucun thalweg en amont trouvé pour le thalweg sélectionné.';
 
-    setupThalwegSelection();
+    document.body.appendChild(alertContainer);
 
-}
-
-function toggleQueryList(type) {
-    const list = document.getElementById(`${type}-list`);
-    if (list) {
-        list.style.display = list.style.display === 'none' || list.style.display === '' ? 'block' : 'none';
-    }
+    setTimeout(() => {
+        document.body.removeChild(alertContainer);
+    }, 3000);
 }
