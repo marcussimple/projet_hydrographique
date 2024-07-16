@@ -200,16 +200,24 @@ function setupThalwegSelection() {
 function updateSelectedThalwegInfo(properties) {
     const infoDiv = document.getElementById('selected-thalweg-info');
     infoDiv.innerHTML = `
-        <p><strong>ID:</strong> ${properties.id}</p>
-        <p><strong>Accumulation:</strong> ${properties.accumulation}</p>
-        <p><strong>Pente:</strong> ${properties.slope.toFixed(2)}°</p>
+        <div class="thalweg-info">
+            <h4>Thalweg sélectionné</h4>
+            <p><strong>ID:</strong> ${properties.id}</p>
+            <p><strong>Accumulation:</strong> ${properties.accumulation}</p>
+            <p><strong>Pente:</strong> ${properties.slope.toFixed(2)}°</p>
+        </div>
     `;
 }
 
 function updateUpstreamThalwegsInfo(thalwegs) {
     const infoDiv = document.getElementById('upstream-thalwegs-info');
-    infoDiv.innerHTML = thalwegs.map(thalweg => `
-        <p><strong>ID:</strong> ${thalweg.upstreamId}, <strong>Profondeur:</strong> ${thalweg.depth}</p>
+    infoDiv.innerHTML = thalwegs.map((thalweg, index) => `
+        <div class="thalweg-info ${index % 2 === 0 ? 'even' : 'odd'}">
+            <p><strong>ID:</strong> ${thalweg.upstreamId}</p>
+            <p><strong>Accumulation:</strong> ${thalweg.accumulation || 'N/A'}</p>
+            <p><strong>Pente:</strong> ${thalweg.slope ? thalweg.slope.toFixed(2) + '°' : 'N/A'}</p>
+            <p><strong>Profondeur:</strong> ${thalweg.depth}</p>
+        </div>
     `).join('');
 }
 
@@ -448,7 +456,7 @@ function updateMap(data, queryId) {
 
     
     fitMapToFeatures(geojson);
-    addPopupInteractions();
+   // addPopupInteractions();
 
 }
 
