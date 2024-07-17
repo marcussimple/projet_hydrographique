@@ -96,7 +96,7 @@ function populateQueryLists() {
                 if (selectedThalwegId) {
                     executeQuery(query.id, { thalwegId: selectedThalwegId });
                 } else {
-                    showMessage("Veuillez d'abord sélectionner un thalweg sur la carte.");
+                    showMessage("Veuillez d'abord sélectionner un cours d'eau sur la carte.");
                 }
             } else if (query.customizable) {
                 showCustomizationModal(query);
@@ -226,7 +226,7 @@ function setupThalwegSelection() {
         map.setPaintProperty('thalwegs', 'line-color', [
             'case',
             ['==', ['get', 'id'], selectedThalwegId],
-            '#FF0000',  // Rouge pour le thalweg sélectionné
+            '#AED6F1',  // bleu pale pour le thalweg sélectionné
             '#3498DB'   // Bleu pour les autres thalwegs
         ]);
     });
@@ -236,7 +236,7 @@ function updateSelectedThalwegInfo(properties) {
     const infoDiv = document.getElementById('selected-thalweg-info');
     infoDiv.innerHTML = `
         <div class="thalweg-info">
-            <h4>Thalweg sélectionné</h4>
+            <h4>Cours d'eau sélectionné</h4>
             <p><strong>ID:</strong> ${properties.id}</p>
             <p><strong>Accumulation:</strong> ${properties.accumulation}</p>
             <p><strong>Pente:</strong> ${properties.slope.toFixed(2)}°</p>
@@ -247,7 +247,7 @@ function updateSelectedThalwegInfo(properties) {
 function updateUpstreamThalwegsInfo(thalwegs) {
     const infoDiv = document.getElementById('upstream-thalwegs-info');
     infoDiv.innerHTML = thalwegs.map((thalweg, index) => `
-        <div class="thalweg-info ${index % 2 === 0 ? 'even' : 'odd'}">
+        <div class="thalweg-info ${index % 2 === 0 ? 'even' : 'odd'}" style="background-color: #ABEBC6;">
             <p><strong>ID:</strong> ${thalweg.upstreamId}</p>
             <p><strong>Accumulation:</strong> ${thalweg.accumulation || 'N/A'}</p>
             <p><strong>Pente:</strong> ${thalweg.slope ? thalweg.slope.toFixed(2) + '°' : 'N/A'}</p>
@@ -259,7 +259,7 @@ function updateUpstreamThalwegsInfo(thalwegs) {
 function updateDownstreamThalwegsInfo(thalwegs) {
     const infoDiv = document.getElementById('upstream-thalwegs-info');
     infoDiv.innerHTML = thalwegs.map((thalweg, index) => `
-        <div class="thalweg-info ${index % 2 === 0 ? 'even' : 'odd'}">
+        <div class="thalweg-info ${index % 2 === 0 ? 'even' : 'odd'}" style="background-color: #F5B7B1;">
             <p><strong>ID:</strong> ${thalweg.downstreamId}</p>
             <p><strong>Accumulation:</strong> ${thalweg.accumulation || 'N/A'}</p>
             <p><strong>Pente:</strong> ${thalweg.slope ? thalweg.slope.toFixed(2) + '°' : 'N/A'}</p>
@@ -420,7 +420,7 @@ function updateMap(data, queryId) {
                 'line-color': [
                     'case',
                     ['==', ['get', 'id'], selectedThalwegId],
-                    '#FF0000',  // Rouge pour le thalweg sélectionné
+                    '#AED6F1',  // Bleu pale pour le thalweg sélectionné
                     '#3498DB'   // Bleu pour les autres thalwegs
                 ],
                 'line-width': 3
@@ -544,7 +544,7 @@ function updateMap(data, queryId) {
                 'line-cap': 'round'
             },
             paint: {
-                'line-color': '#FF00FF',  // Couleur différente pour les thalwegs en aval
+                'line-color': '#CB4335',  // Rouge pour les thalwegs en aval
                 'line-width': 3
             }
         });
@@ -553,7 +553,7 @@ function updateMap(data, queryId) {
             type: 'circle',
             paint: {
                 'circle-radius': 3,
-                'circle-color': '#FF00FF',
+                'circle-color': '#CB4335',
                 'circle-stroke-width': 1,
                 'circle-stroke-color': '#000'
             }
