@@ -31,10 +31,14 @@
         <div id="map"></div>
 
         <div id="right-panel">
-            <h3>Informations des cours d'eau</h3>
+            <h3>Informations du cours d'eau</h3>
+            <div id="thalweg-selector" style="margin-bottom: 15px;">
+                <input type="number" id="thalweg-id-input" placeholder="Entrez l'ID du cours d'eau">
+                <button id="select-thalweg-button">Sélectionner</button>
+            </div>
             <div id="selected-thalweg-info"></div>
-
-            <h3>Thalwegs en amont/aval</h3>
+        
+            <h3>Cours d'eau en amont/aval</h3>
             <div id="upstream-thalwegs-info"></div>
         </div>
     </div>
@@ -47,12 +51,12 @@
         </div>
     </div>
 
-    <div id="loading-overlay" style="display: none;">
-        <div class="loading-spinner"></div>
-        <p>Chargement des données...</p>
-    </div>
-
     {% csrf_token %}
     <script src="{% static 'js/map_script.js' %}"></script>
+
+    <div id="loading-overlay" style="display: none;">
+        <img src="{% static 'image/loading.gif' %}" alt="Loading..." class="loader">
+        <p>Chargement des données...</p>
+    </div>
 </body>
 </html>

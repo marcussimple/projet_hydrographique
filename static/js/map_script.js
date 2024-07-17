@@ -54,7 +54,7 @@ const queries = [
         type: "validation", 
         cypher: "CALL custom.getDownstreamThalwegs($thalwegId)",
         customizable: false
-    }
+    },
 ];
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -77,6 +77,16 @@ function initializeMap() {
     });
 }
 
+function showLoading() {
+    console.log('Showing loading overlay');
+    document.getElementById('loading-overlay').style.display = 'flex';
+}
+
+function hideLoading() {
+    console.log('Hiding loading overlay');
+    document.getElementById('loading-overlay').style.display = 'none';
+}
+
 function populateQueryLists() {
     console.log("Populating query lists");
     
@@ -96,7 +106,7 @@ function populateQueryLists() {
                 if (selectedThalwegId) {
                     executeQuery(query.id, { thalwegId: selectedThalwegId });
                 } else {
-                    showMessage("Veuillez d'abord sélectionner un cours d'eau sur la carte.");
+                    showMessage("Veuillez d'abord sélectionner un thalweg sur la carte.");
                 }
             } else if (query.customizable) {
                 showCustomizationModal(query);
@@ -161,25 +171,6 @@ function showCustomizationModal(query) {
     };
 }
 
-function showValidationOptions(thalwegId) {
-    const modal = document.getElementById('validationModal');
-    const upstreamButton = document.getElementById('showUpstream');
-    const downstreamButton = document.getElementById('showDownstream');
-
-    upstreamButton.onclick = function() {
-        executeQuery(4, { thalwegId: thalwegId });
-        modal.style.display = 'none';
-    };
-
-    downstreamButton.onclick = function() {
-        executeQuery(5, { thalwegId: thalwegId });
-        modal.style.display = 'none';
-    };
-
-    modal.style.display = 'block';
-}
-
-
 function setupEventListeners() {
     document.querySelectorAll('.query-type').forEach(element => {
         element.addEventListener('click', function() {
@@ -188,23 +179,6 @@ function setupEventListeners() {
             toggleQueryList(type);
         });
     });
-/*
-    document.getElementById('showUpstream').addEventListener('click', function() {
-        if (selectedThalwegId) {
-            executeQuery(4, { thalwegId: selectedThalwegId });
-        } else {
-            showMessage("Veuillez d'abord sélectionner un thalweg sur la carte.");
-        }
-    });
-
-    document.getElementById('showDownstream').addEventListener('click', function() {
-        if (selectedThalwegId) {
-            executeQuery(5, { thalwegId: selectedThalwegId });
-        } else {
-            showMessage("Veuillez d'abord sélectionner un thalweg sur la carte.");
-        }
-    });
-*/
 
     setupThalwegSelection();
 }
@@ -219,17 +193,75 @@ function toggleQueryList(type) {
 function setupThalwegSelection() {
     map.on('click', 'thalwegs', function(e) {
         const thalwegId = e.features[0].properties.id;
-        selectedThalwegId = thalwegId;
-        
-        updateSelectedThalwegInfo(e.features[0].properties);
-        
-        map.setPaintProperty('thalwegs', 'line-color', [
-            'case',
-            ['==', ['get', 'id'], selectedThalwegId],
-            '#AED6F1',  // bleu pale pour le thalweg sélectionné
-            '#3498DB'   // Bleu pour les autres thalwegs
-        ]);
+        selectThalweg(thalwegId);
     });
+
+    document.getElementById('select-thalweg-button').addEventListener('click', function() {
+        const thalwegId = document.getElementById('thalweg-id-input').value;
+        if (thalwegId) {
+            selectThalweg(parseInt(thalwegId));
+        } else {
+            showMessage("Veuillez entrer un ID de thalweg valide.");
+        }
+    });
+}
+
+function selectThalweg(thalwegId) {
+    selectedThalwegId = thalwegId;
+    document.getElementById('thalweg-id-input').value = thalwegId;
+    
+    showLoading(); // Afficher l'animation de chargement
+
+    // Mettre à jour la couleur du thalweg sélectionné sur la carte
+    map.setPaintProperty('thalwegs', 'line-color', [
+        'case',
+        ['==', ['get', 'id'], selectedThalwegId],
+        '#0000FF',  // Bleu foncé pour le thalweg sélectionné
+        '#819FF7'   // Bleu pale pour les autres thalwegs                      ---------------------------------- SELECTED THALWEG COLOR--------------------
+    ]);
+
+    // Récupérer les informations du thalweg sélectionné
+    fetch('/get_thalweg_info/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({ thalwegId: selectedThalwegId }),
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Erreur réseau lors de la récupération des informations du thalweg');
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        updateSelectedThalwegInfo(data);
+        zoomToThalweg(data.coordinates);
+    })
+    .catch(error => {
+        console.error('Erreur lors de la récupération des informations du thalweg:', error);
+        showMessage("Erreur lors de la récupération des informations du thalweg.");
+    })
+    .finally(() => {
+        hideLoading(); // Cacher l'animation de chargement, que la requête réussisse ou échoue
+    });
+}
+
+function zoomToThalweg(coordinates) {
+    if (coordinates && coordinates.length > 0) {
+        const bounds = coordinates.reduce((bounds, coord) => {
+            return bounds.extend(coord);
+        }, new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
+
+        map.fitBounds(bounds, {
+            padding: 50,  // Ajoute un peu d'espace autour du thalweg
+            duration: 1000  // Durée de l'animation en millisecondes
+        });
+    }
 }
 
 function updateSelectedThalwegInfo(properties) {
@@ -239,7 +271,7 @@ function updateSelectedThalwegInfo(properties) {
             <h4>Cours d'eau sélectionné</h4>
             <p><strong>ID:</strong> ${properties.id}</p>
             <p><strong>Accumulation:</strong> ${properties.accumulation}</p>
-            <p><strong>Pente:</strong> ${properties.slope.toFixed(2)}°</p>
+            <p><strong>Pente:</strong> ${properties.slope ? properties.slope.toFixed(2) + '°' : 'N/A'}</p>
         </div>
     `;
 }
@@ -247,7 +279,7 @@ function updateSelectedThalwegInfo(properties) {
 function updateUpstreamThalwegsInfo(thalwegs) {
     const infoDiv = document.getElementById('upstream-thalwegs-info');
     infoDiv.innerHTML = thalwegs.map((thalweg, index) => `
-        <div class="thalweg-info ${index % 2 === 0 ? 'even' : 'odd'}" style="background-color: #ABEBC6;">
+        <div class="thalweg-info ${index % 2 === 0 ? 'even' : 'odd'}" style="background-color: #90EE90;">
             <p><strong>ID:</strong> ${thalweg.upstreamId}</p>
             <p><strong>Accumulation:</strong> ${thalweg.accumulation || 'N/A'}</p>
             <p><strong>Pente:</strong> ${thalweg.slope ? thalweg.slope.toFixed(2) + '°' : 'N/A'}</p>
@@ -259,33 +291,13 @@ function updateUpstreamThalwegsInfo(thalwegs) {
 function updateDownstreamThalwegsInfo(thalwegs) {
     const infoDiv = document.getElementById('upstream-thalwegs-info');
     infoDiv.innerHTML = thalwegs.map((thalweg, index) => `
-        <div class="thalweg-info ${index % 2 === 0 ? 'even' : 'odd'}" style="background-color: #F5B7B1;">
+        <div class="thalweg-info ${index % 2 === 0 ? 'even' : 'odd'}" style="background-color: #FFB6C1;">
             <p><strong>ID:</strong> ${thalweg.downstreamId}</p>
             <p><strong>Accumulation:</strong> ${thalweg.accumulation || 'N/A'}</p>
             <p><strong>Pente:</strong> ${thalweg.slope ? thalweg.slope.toFixed(2) + '°' : 'N/A'}</p>
             <p><strong>Profondeur:</strong> ${thalweg.depth}</p>
         </div>
     `).join('');
-}
-
-function showMessage(message) {
-    const alertContainer = document.createElement('div');
-    alertContainer.style.position = 'absolute';
-    alertContainer.style.top = '20px';
-    alertContainer.style.left = '50%';
-    alertContainer.style.transform = 'translateX(-50%)';
-    alertContainer.style.backgroundColor = 'white';
-    alertContainer.style.padding = '10px';
-    alertContainer.style.borderRadius = '5px';
-    alertContainer.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
-    alertContainer.style.zIndex = '1000';
-    alertContainer.innerHTML = message;
-
-    document.body.appendChild(alertContainer);
-
-    setTimeout(() => {
-        document.body.removeChild(alertContainer);
-    }, 3000);
 }
 
 async function executeQuery(queryId, customParams = {}) {
@@ -297,6 +309,8 @@ async function executeQuery(queryId, customParams = {}) {
 
     console.log(`Executing query: ${query.text}`);
     console.log('Custom params:', customParams);
+
+    showLoading(); // Afficher l'animation de chargement
 
     const convertedParams = {};
     for (const [key, value] of Object.entries(customParams)) {
@@ -343,10 +357,11 @@ async function executeQuery(queryId, customParams = {}) {
         }
     } catch (error) {
         console.error('Erreur lors de l\'exécution de la requête:', error);
+        showMessage("Une erreur s'est produite lors de l'exécution de la requête.");
+    } finally {
+        hideLoading(); // Cacher l'animation de chargement, que la requête réussisse ou échoue
     }
 }
-
-//----------------------------------------------------------------------------- UPDATE MAP ------------------------------------------------------------
 
 function updateMap(data, queryId) {
     console.log("Updating map with data:", data);
@@ -420,8 +435,8 @@ function updateMap(data, queryId) {
                 'line-color': [
                     'case',
                     ['==', ['get', 'id'], selectedThalwegId],
-                    '#AED6F1',  // Bleu pale pour le thalweg sélectionné
-                    '#3498DB'   // Bleu pour les autres thalwegs
+                    '#0000FF',  // Bleu foncé pour le thalweg sélectionné
+                    '#819FF7'   // Bleu pale pour les autres thalwegs                 ------------ PAGE LOADING THALWEG COLOR-------------------------
                 ],
                 'line-width': 3
             }
@@ -436,7 +451,7 @@ function updateMap(data, queryId) {
                 'circle-stroke-color': '#000'
             }
         });
-    }else if (queryId === 4) {   // Thalwegs en amont
+    } else if (queryId === 4) {   // Thalwegs en amont
         console.log(`Processing ${data.length} upstream thalwegs`);
         const processedThalwegs = new Map();
 
@@ -483,7 +498,7 @@ function updateMap(data, queryId) {
                 'line-cap': 'round'
             },
             paint: {
-                'line-color': '#00FF00',
+                'line-color': '#00FF00', //vert pour les thalwegs en amont
                 'line-width': 3
             }
         });
@@ -499,7 +514,7 @@ function updateMap(data, queryId) {
         });
 
         updateUpstreamThalwegsInfo(data);
-    }else if (queryId === 5) {   // Thalwegs en aval
+    } else if (queryId === 5) {   // Thalwegs en aval
         console.log(`Processing ${data.length} downstream thalwegs`);
         const processedThalwegs = new Map();
 
@@ -544,7 +559,7 @@ function updateMap(data, queryId) {
                 'line-cap': 'round'
             },
             paint: {
-                'line-color': '#CB4335',  // Rouge pour les thalwegs en aval
+                'line-color': '#FE2E2E',  // Couleur différente pour les thalwegs en aval
                 'line-width': 3
             }
         });
@@ -553,7 +568,7 @@ function updateMap(data, queryId) {
             type: 'circle',
             paint: {
                 'circle-radius': 3,
-                'circle-color': '#CB4335',
+                'circle-color': '#FE2E2E',
                 'circle-stroke-width': 1,
                 'circle-stroke-color': '#000'
             }
@@ -567,7 +582,6 @@ function updateMap(data, queryId) {
    // addPopupInteractions();
 
 }
-
 
 function updateLayer(layerId, geojsonData, layerOptions) {
     if (!map.getSource(layerId)) {
@@ -606,7 +620,6 @@ function addEndpoints(thalweg, endpointsGeojson, isUpstream = false) {
         });
     });
 }
-
 
 function fitMapToFeatures(geojson) {
     if (geojson.features.length > 0) {
@@ -728,3 +741,24 @@ function showNoUpstreamMessage() {
         document.body.removeChild(alertContainer);
     }, 3000);
 }
+
+function showMessage(message) {
+    const alertContainer = document.createElement('div');
+    alertContainer.style.position = 'absolute';
+    alertContainer.style.top = '20px';
+    alertContainer.style.left = '50%';
+    alertContainer.style.transform = 'translateX(-50%)';
+    alertContainer.style.backgroundColor = 'white';
+    alertContainer.style.padding = '10px';
+    alertContainer.style.borderRadius = '5px';
+    alertContainer.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+    alertContainer.style.zIndex = '1000';
+    alertContainer.innerHTML = message;
+
+    document.body.appendChild(alertContainer);
+
+    setTimeout(() => {
+        document.body.removeChild(alertContainer);
+    }, 3000);
+}
+

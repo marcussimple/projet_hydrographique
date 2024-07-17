@@ -123,6 +123,30 @@ def execute_query(request):
     
     return JsonResponse({"error": "Method not allowed"}, status=405)
 
+@csrf_exempt
+def get_thalweg_info(request):
+    if request.method == 'POST':
+        data = json.loads(request.body)
+        thalweg_id = data.get('thalwegId')
+        
+        with driver.session(database=NEO4J_DATABASE) as session:
+            result = session.run("MATCH (t:Thalweg {id: $id}) RETURN t", id=thalweg_id)
+            thalweg = result.single()
+            
+            if thalweg:
+                thalweg_info = thalweg['t']
+                coordinates = parse_linestring(thalweg_info['geometry'])
+                return JsonResponse({
+                    "id": thalweg_info['id'],
+                    "accumulation": thalweg_info['accumulation'],
+                    "slope": thalweg_info['slope'],
+                    "coordinates": coordinates
+                })
+            else:
+                return JsonResponse({"error": "Thalweg not found"}, status=404)
+
+    return JsonResponse({"error": "Method not allowed"}, status=405)
+
 # Fonction utilitaire pour les logs détaillés (à utiliser pour le débogage si nécessaire)
 def log_detailed_results(records):
     print(f"Raw records: {records}")
