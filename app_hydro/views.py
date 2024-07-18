@@ -79,37 +79,29 @@ def execute_query(request):
         
         with driver.session(database=NEO4J_DATABASE) as session:
             try:
-                result = session.run(cypher, params)
+                if query_id == 6:  # Nouvelle requête pour thalwegs et ridges
+                    result = session.run("CALL custom.getThalwegAndRidge()")
+                else:
+                    result = session.run(cypher, params)
+                
                 records = result.data()
 
                 logger.info(f"Raw records count: {len(records)}")
                 logger.debug(f"First few records: {records[:5]}")
 
-                if query_id in [1, 3]:  # Nœuds
-                    formatted_results = [{
-                        "id": record.get('id'),
-                        "longitude": record.get('longitude'),
-                        "latitude": record.get('latitude'),
-                        "altitude": record.get('altitude')
-                    } for record in records]
-                elif query_id == 2:  # Thalwegs
+                if query_id == 6:  # Formattage pour thalwegs et ridges
                     formatted_results = []
                     for record in records:
-                        geometry = record.get('geometry')
-                        coordinates = parse_linestring(geometry)
-                        if coordinates:
-                            formatted_result = {
-                                "id": record.get('id'),
-                                "coordinates": coordinates,
-                                "accumulation": record.get('accumulation'),
-                                "slope": record.get('slope')
-                            }
-                            formatted_results.append(formatted_result)
-                        else:
-                            logger.warning(f"Empty coordinates for thalweg {record.get('id')}")
-                elif query_id in [4, 5, 6]:  # Thalwegs en amont, en aval, ou crêtes
-                    formatted_results = format_upstream_downstream_results(records)
+                        formatted_result = {
+                            "id": record['id'],
+                            "type": record['type'],
+                            "geometry": record['geometry'],
+                            "accumulation": record['accumulation'],
+                            "slope": record['slope']
+                        }
+                        formatted_results.append(formatted_result)
                 else:
+                    # Formattage pour les autres types de requêtes...
                     formatted_results = records
                 
                 logger.info(f"Number of formatted results: {len(formatted_results)}")
