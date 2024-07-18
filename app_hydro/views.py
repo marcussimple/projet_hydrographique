@@ -79,30 +79,27 @@ def execute_query(request):
         
         with driver.session(database=NEO4J_DATABASE) as session:
             try:
-                if query_id == 6:  # Nouvelle requête pour thalwegs et ridges
-                    result = session.run("CALL custom.getThalwegAndRidge()")
-                else:
-                    result = session.run(cypher, params)
-                
+                result = session.run(cypher, params)
                 records = result.data()
 
                 logger.info(f"Raw records count: {len(records)}")
                 logger.debug(f"First few records: {records[:5]}")
 
-                if query_id == 6:  # Formattage pour thalwegs et ridges
+                if query_id in [4, 5]:  # Requêtes pour thalwegs en amont/aval
+                    formatted_results = format_upstream_downstream_results(records)
+                else:
                     formatted_results = []
                     for record in records:
                         formatted_result = {
-                            "id": record['id'],
-                            "type": record['type'],
-                            "geometry": record['geometry'],
-                            "accumulation": record['accumulation'],
-                            "slope": record['slope']
+                            "id": record.get('id') or record.get('upstreamId') or record.get('downstreamId'),
+                            "type": record.get('type', 'thalweg'),
+                            "coordinates": parse_linestring(record.get('geometry', '') or record.get('upstreamGeometry', '')),
+                            "accumulation": record.get('accumulation'),
+                            "slope": record.get('slope'),
+                            "depth": record.get('depth'),
+                            "valleyId": record.get('valleyId')
                         }
                         formatted_results.append(formatted_result)
-                else:
-                    # Formattage pour les autres types de requêtes...
-                    formatted_results = records
                 
                 logger.info(f"Number of formatted results: {len(formatted_results)}")
                 logger.debug(f"Sample of formatted results: {formatted_results[:5]}")
@@ -113,6 +110,7 @@ def execute_query(request):
                 return JsonResponse({"error": str(e)}, status=500)
     
     return JsonResponse({"error": "Method not allowed"}, status=405)
+
 
 @csrf_exempt
 def get_thalweg_info(request):
@@ -162,26 +160,17 @@ def format_upstream_downstream_results(records):
         
         if thalweg_coordinates:
             formatted_result = {
-                id_key: record[id_key],
+                "id": record[id_key],
+                "type": "thalweg",
+                "coordinates": thalweg_coordinates,
                 "depth": record['depth'],
                 "valleyId": record['valleyId'],
-                "coordinates": thalweg_coordinates,
-                "ridges": []
+                "accumulation": None,  # Ces valeurs peuvent être ajoutées si disponibles
+                "slope": None
             }
-            
-            # Traitement des ridges
-            if 'ridgeGeometries' in record and 'surroundingRidges' in record:
-                for ridge_id, ridge_geometry in zip(record['surroundingRidges'], record['ridgeGeometries']):
-                    ridge_coordinates = parse_linestring(ridge_geometry)
-                    if ridge_coordinates:
-                        formatted_result["ridges"].append({
-                            "id": ridge_id,
-                            "coordinates": ridge_coordinates
-                        })
-            
             formatted_results.append(formatted_result)
         else:
             logger.warning(f"Empty coordinates for thalweg {record[id_key]}")
     
-    logger.info(f"Formatted {len(formatted_results)} thalwegs with their ridges")
+    logger.info(f"Formatted {len(formatted_results)} upstream/downstream thalwegs")
     return formatted_results
