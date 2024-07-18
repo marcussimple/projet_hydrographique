@@ -9,7 +9,7 @@ import logging
 # Configuration de la connexion Neo4j
 NEO4J_URI = "bolt://localhost:7687"
 NEO4J_USER = "neo4j"
-NEO4J_PASSWORD = "password"  # Remplacez par votre mot de passe réel
+NEO4J_PASSWORD = "summer2024"  # Remplacez par votre mot de passe réel
 NEO4J_DATABASE = "hydronetwork"
 
 
@@ -31,23 +31,40 @@ def parse_linestring(geometry_string):
     logger.warning(f"Could not parse geometry string: {geometry_string}")
     return []
 
+
 def format_upstream_downstream_results(records):
     formatted_results = []
     for record in records:
-        coordinates = parse_linestring(record['upstreamGeometry'])
-        if coordinates:
+        geometry_key = 'upstreamGeometry' if 'upstreamGeometry' in record else 'downstreamGeometry'
+        id_key = 'upstreamId' if 'upstreamId' in record else 'downstreamId'
+        thalweg_coordinates = parse_linestring(record[geometry_key])
+        
+        if thalweg_coordinates:
             formatted_result = {
-                "upstreamId": record['upstreamId'],
+                id_key: record[id_key],
                 "depth": record['depth'],
                 "valleyId": record['valleyId'],
-                "coordinates": coordinates
+                "coordinates": thalweg_coordinates,
+                "ridges": []
             }
+            
+            # Traitement des ridges
+            if 'ridgeGeometries' in record and 'surroundingRidges' in record:
+                for ridge_id, ridge_geometry in zip(record['surroundingRidges'], record['ridgeGeometries']):
+                    ridge_coordinates = parse_linestring(ridge_geometry)
+                    if ridge_coordinates:
+                        formatted_result["ridges"].append({
+                            "id": ridge_id,
+                            "coordinates": ridge_coordinates
+                        })
+            
             formatted_results.append(formatted_result)
         else:
-            logger.warning(f"Empty coordinates for thalweg {record['upstreamId']}")
+            logger.warning(f"Empty coordinates for thalweg {record[id_key]}")
     
-    logger.info(f"Formatted {len(formatted_results)} upstream thalwegs")
+    logger.info(f"Formatted {len(formatted_results)} thalwegs with their ridges")
     return formatted_results
+
 
 @csrf_exempt
 def execute_query(request):
@@ -57,20 +74,8 @@ def execute_query(request):
         query_id = data.get('queryId')
         params = data.get('params', {})
         
-        print(f"Received query: {cypher}")
-        print(f"Received params: {params}")
-
         logger.info(f"Received query: {cypher}")
         logger.info(f"Received params: {params}")
-        
-        # Conversion des paramètres
-        for key, value in params.items():
-            if value == '':
-                params[key] = None
-            elif key == 'limit':
-                params[key] = int(value) if value is not None else None
-            elif key in ['X', 'Y']:
-                params[key] = float(value) if value is not None else None
         
         with driver.session(database=NEO4J_DATABASE) as session:
             try:
@@ -78,9 +83,8 @@ def execute_query(request):
                 records = result.data()
 
                 logger.info(f"Raw records count: {len(records)}")
+                logger.debug(f"First few records: {records[:5]}")
 
-                print(f"Raw records count: {len(records)}")
-                
                 if query_id in [1, 3]:  # Nœuds
                     formatted_results = [{
                         "id": record.get('id'),
@@ -102,22 +106,17 @@ def execute_query(request):
                             }
                             formatted_results.append(formatted_result)
                         else:
-                            print(f"Warning: Empty coordinates for thalweg {record.get('id')}")
-
-                elif query_id in [4, 5]:  # Thalwegs en amont ou en aval
+                            logger.warning(f"Empty coordinates for thalweg {record.get('id')}")
+                elif query_id in [4, 5, 6]:  # Thalwegs en amont, en aval, ou crêtes
                     formatted_results = format_upstream_downstream_results(records)
                 else:
                     formatted_results = records
                 
-                print(f"Number of formatted results: {len(formatted_results)}")
-                print(f"Sample of formatted results: {formatted_results[:5]}")
-
                 logger.info(f"Number of formatted results: {len(formatted_results)}")
-                logger.debug(f"Formatted results: {formatted_results}")
+                logger.debug(f"Sample of formatted results: {formatted_results[:5]}")
                 
                 return JsonResponse({"results": formatted_results})
             except Exception as e:
-                print(f"Error executing query: {str(e)}")
                 logger.error(f"Error executing query: {str(e)}", exc_info=True)
                 return JsonResponse({"error": str(e)}, status=500)
     
@@ -167,17 +166,30 @@ def format_upstream_downstream_results(records):
     for record in records:
         geometry_key = 'upstreamGeometry' if 'upstreamGeometry' in record else 'downstreamGeometry'
         id_key = 'upstreamId' if 'upstreamId' in record else 'downstreamId'
-        coordinates = parse_linestring(record[geometry_key])
-        if coordinates:
+        thalweg_coordinates = parse_linestring(record[geometry_key])
+        
+        if thalweg_coordinates:
             formatted_result = {
                 id_key: record[id_key],
                 "depth": record['depth'],
                 "valleyId": record['valleyId'],
-                "coordinates": coordinates
+                "coordinates": thalweg_coordinates,
+                "ridges": []
             }
+            
+            # Traitement des ridges
+            if 'ridgeGeometries' in record and 'surroundingRidges' in record:
+                for ridge_id, ridge_geometry in zip(record['surroundingRidges'], record['ridgeGeometries']):
+                    ridge_coordinates = parse_linestring(ridge_geometry)
+                    if ridge_coordinates:
+                        formatted_result["ridges"].append({
+                            "id": ridge_id,
+                            "coordinates": ridge_coordinates
+                        })
+            
             formatted_results.append(formatted_result)
         else:
             logger.warning(f"Empty coordinates for thalweg {record[id_key]}")
     
-    logger.info(f"Formatted {len(formatted_results)} thalwegs")
+    logger.info(f"Formatted {len(formatted_results)} thalwegs with their ridges")
     return formatted_results
