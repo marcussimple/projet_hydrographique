@@ -217,9 +217,13 @@ function parseLineString(geometryString) {
     if (match) {
         const coordinates = match[1].split(', ').map(coord => {
             const [lon, lat, z] = coord.split(' ').map(parseFloat);
-            return [lon, lat];
-        });
-        return coordinates;
+            if (isValidCoordinate([lon, lat])) {
+                return [lon, lat];
+            }
+            console.warn(`Invalid coordinate in LineString: ${coord}`);
+            return null;
+        }).filter(coord => coord !== null);
+        return coordinates.length > 0 ? coordinates : null;
     }
     return null;
 }
@@ -334,6 +338,7 @@ function updateDownstreamThalwegsInfo(thalwegs) {
     `).join('');
 }
 
+
 async function executeQuery(queryId, customParams = {}) {
     const query = queries.find(q => q.id === queryId);
     if (!query) {
@@ -344,7 +349,7 @@ async function executeQuery(queryId, customParams = {}) {
     console.log(`Executing query: ${query.text}`);
     console.log('Custom params:', customParams);
 
-    showLoading(); // Afficher l'animation de chargement
+    showLoading();
 
     const convertedParams = {};
     for (const [key, value] of Object.entries(customParams)) {
@@ -373,12 +378,16 @@ async function executeQuery(queryId, customParams = {}) {
             }),
         });
 
-        if (!response.ok) {
-            throw new Error(`Erreur HTTP: ${response.status}`);
-        }
-
         const data = await response.json();
         console.log("Received data:", data);
+
+        if (!response.ok) {
+            throw new Error(`Erreur HTTP: ${response.status}, Message: ${data.error || 'Erreur inconnue'}`);
+        }
+
+        if (data.error) {
+            throw new Error(data.error);
+        }
 
         if (data.results && data.results.length > 0) {
             console.log(`Updating map with ${data.results.length} results for query ${queryId}`);
@@ -387,13 +396,15 @@ async function executeQuery(queryId, customParams = {}) {
             console.log("No results returned from the query");
             if (queryId === 4) {
                 showNoUpstreamMessage();
+            } else {
+                showMessage("Aucun résultat trouvé pour cette requête.");
             }
         }
     } catch (error) {
         console.error('Erreur lors de l\'exécution de la requête:', error);
-        showMessage("Une erreur s'est produite lors de l'exécution de la requête.");
+        showMessage(`Une erreur s'est produite lors de l'exécution de la requête: ${error.message}`);
     } finally {
-        hideLoading(); // Cacher l'animation de chargement, que la requête réussisse ou échoue
+        hideLoading();
     }
 }
 
@@ -435,18 +446,22 @@ function updateMap(data, queryId) {
     if (queryId === 1 || queryId === 3) {
         // Traitement des nœuds
         data.forEach(node => {
-            nodesGeojson.features.push({
-                type: 'Feature',
-                geometry: {
-                    type: 'Point',
-                    coordinates: [node.longitude, node.latitude]
-                },
-                properties: {
-                    id: node.id,
-                    altitude: node.altitude,
-                    nodeType: 'other'
-                }
-            });
+            if (isValidCoordinate([node.longitude, node.latitude])) {
+                nodesGeojson.features.push({
+                    type: 'Feature',
+                    geometry: {
+                        type: 'Point',
+                        coordinates: [node.longitude, node.latitude]
+                    },
+                    properties: {
+                        id: node.id,
+                        altitude: node.altitude,
+                        nodeType: 'other'
+                    }
+                });
+            } else {
+                console.warn(`Invalid node coordinates: [${node.longitude}, ${node.latitude}]`);
+            }
         });
     } else if (queryId === 2 || queryId === 4 || queryId === 5 || queryId === 6) {
         // Traitement des thalwegs et ridges
@@ -477,29 +492,34 @@ function updateMap(data, queryId) {
 
                 // Ajouter les nœuds de début et de fin
                 [coordinates[0], coordinates[coordinates.length - 1]].forEach((coord, index) => {
-                    nodesGeojson.features.push({
-                        type: 'Feature',
-                        geometry: {
-                            type: 'Point',
-                            coordinates: coord
-                        },
-                        properties: {
-                            id: `${feature.properties.id}-${index === 0 ? 'start' : 'end'}`,
-                            parentId: feature.properties.id,
-                            parentType: feature.properties.type,
-                            nodeType: queryId === 4 ? 'upstream' : (queryId === 5 ? 'downstream' : 'other')
-                        }
-                    });
+                    if (isValidCoordinate(coord)) {
+                        nodesGeojson.features.push({
+                            type: 'Feature',
+                            geometry: {
+                                type: 'Point',
+                                coordinates: coord
+                            },
+                            properties: {
+                                id: `${feature.properties.id}-${index === 0 ? 'start' : 'end'}`,
+                                parentId: feature.properties.id,
+                                parentType: feature.properties.type,
+                                nodeType: queryId === 4 ? 'upstream' : (queryId === 5 ? 'downstream' : 'other')
+                            }
+                        });
+                    }
                 });
             }
         });
     }
 
+    console.log("Thalweg features:", thalwegLinesGeojson.features.length);
+    console.log("Ridge features:", ridgeLinesGeojson.features.length);
+    console.log("Node features:", nodesGeojson.features.length);
+
     // Mise à jour des couches
     const layerPrefix = queryId === 4 ? 'upstream' : (queryId === 5 ? 'downstream' : '');
     const thalwegColor = queryId === 4 ? '#00FF00' : (queryId === 5 ? '#FE2E2E' : '#0000FF');
 
-    // Mise à jour ou ajout de la couche de thalwegs
     updateLayer(`${layerPrefix}thalwegs`, thalwegLinesGeojson, {
         type: 'line',
         layout: {
@@ -512,7 +532,6 @@ function updateMap(data, queryId) {
         }
     });
 
-    // Mise à jour ou ajout de la couche de ridges (si nécessaire)
     if (queryId === 6) {
         updateLayer('ridges', ridgeLinesGeojson, {
             type: 'line',
@@ -527,7 +546,6 @@ function updateMap(data, queryId) {
         });
     }
 
-    // Mise à jour ou ajout de la couche de nœuds
     updateLayer(`${layerPrefix}nodes`, nodesGeojson, {
         type: 'circle',
         paint: {
@@ -544,8 +562,26 @@ function updateMap(data, queryId) {
         }
     });
 
-    // Ajuster la vue de la carte
-    fitMapToFeatures(thalwegLinesGeojson);
+    // Combiner toutes les caractéristiques pour le zoom
+    const allFeatures = {
+        type: 'FeatureCollection',
+        features: [
+            ...thalwegLinesGeojson.features,
+            ...ridgeLinesGeojson.features,
+            ...nodesGeojson.features
+        ]
+    };
+
+    console.log("Total features for fitMapToFeatures:", allFeatures.features.length);
+
+    const zoomOptions = {
+        minZoom: queryId === 4 ? 12 : 10,
+        maxZoom: 15,
+        padding: { top: 50, bottom: 50, left: 50, right: 50 },
+        duration: 1000
+    };
+
+    fitMapToFeatures(allFeatures, zoomOptions);
 
     // Mettre à jour les interactions
     updateInteractions();
@@ -659,21 +695,97 @@ function addEndpoints(thalweg, endpointsGeojson, isUpstream = false) {
     });
 }
 
-function fitMapToFeatures(geojson) {
-    if (geojson.features.length > 0) {
-        const bounds = new mapboxgl.LngLatBounds();
-        geojson.features.forEach(feature => {
-            if (feature.geometry.type === 'Point') {
+function isValidCoordinate(coord) {
+    return Array.isArray(coord) && 
+           coord.length === 2 && 
+           typeof coord[0] === 'number' && 
+           typeof coord[1] === 'number' &&
+           coord[0] >= -180 && coord[0] <= 180 && 
+           coord[1] >= -90 && coord[1] <= 90;
+}
+
+
+function fitMapToFeatures(geojson, options = {}) {
+    console.log("fitMapToFeatures called with:", JSON.stringify(geojson));
+    console.log("Options:", options);
+
+    if (!geojson.features || geojson.features.length === 0) {
+        console.warn('No features to fit map to');
+        return;
+    }
+
+    const bounds = new mapboxgl.LngLatBounds();
+    let hasValidFeatures = false;
+
+    geojson.features.forEach((feature, index) => {
+        console.log(`Processing feature ${index}:`, JSON.stringify(feature));
+
+        if (feature.geometry && feature.geometry.coordinates) {
+            if (feature.geometry.type === 'Point' && isValidCoordinate(feature.geometry.coordinates)) {
                 bounds.extend(feature.geometry.coordinates);
+                hasValidFeatures = true;
             } else if (feature.geometry.type === 'LineString') {
                 feature.geometry.coordinates.forEach(coord => {
-                    bounds.extend(coord);
+                    if (isValidCoordinate(coord)) {
+                        bounds.extend(coord);
+                        hasValidFeatures = true;
+                    } else {
+                        console.warn(`Invalid coordinate in LineString: ${JSON.stringify(coord)}`);
+                    }
+                });
+            } else if (feature.geometry.type === 'Polygon') {
+                feature.geometry.coordinates[0].forEach(coord => {
+                    if (isValidCoordinate(coord)) {
+                        bounds.extend(coord);
+                        hasValidFeatures = true;
+                    } else {
+                        console.warn(`Invalid coordinate in Polygon: ${JSON.stringify(coord)}`);
+                    }
                 });
             }
+        }
+    });
+
+    console.log("Bounds after processing:", bounds.toString());
+
+    if (hasValidFeatures && !bounds.isEmpty()) {
+        const ne = bounds.getNorthEast();
+        const sw = bounds.getSouthWest();
+        const latDiff = Math.abs(ne.lat - sw.lat);
+        const lngDiff = Math.abs(ne.lng - sw.lng);
+        const maxDiff = Math.max(latDiff, lngDiff);
+
+        // Calculate appropriate zoom level
+        let zoom = Math.floor(Math.log2(360 / maxDiff)) + 1;
+        console.log("Calculated initial zoom:", zoom);
+
+        // Adjust zoom based on options
+        zoom = Math.min(zoom, options.maxZoom || 15);
+        zoom = Math.max(zoom, options.minZoom || 10);
+
+        console.log("Final zoom after adjustments:", zoom);
+
+        const padding = options.padding || { top: 50, bottom: 50, left: 50, right: 50 };
+        const duration = options.duration || 1000;
+
+        console.log("Fitting map with options:", {
+            bounds: bounds.toString(),
+            padding,
+            zoom,
+            duration
         });
-        map.fitBounds(bounds, { padding: 50 });
+
+        map.fitBounds(bounds, {
+            padding,
+            maxZoom: options.maxZoom || 15,
+            zoom,
+            duration
+        });
+    } else {
+        console.warn('No valid features to fit map to or bounds are empty');
     }
 }
+
 
 function addPopupInteractions() {
     const layers = ['nodes', 'thalwegs', 'upstream-thalwegs', 'thalweg-endpoints', 'upstream-thalweg-endpoints'];
