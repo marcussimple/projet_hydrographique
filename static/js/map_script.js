@@ -80,6 +80,7 @@ function initializeMap() {
     });
 
     // Ajoutez un bouton pour activer la sélection de thalweg
+    /*
     const controlContainer = document.createElement('div');
     controlContainer.className = 'mapboxgl-ctrl mapboxgl-ctrl-group';
     
@@ -90,6 +91,7 @@ function initializeMap() {
     controlContainer.appendChild(selectButton);
     map.addControl(new mapboxgl.NavigationControl(), 'top-right');
     map.addControl({ onAdd: () => controlContainer, onRemove: () => {} }, 'top-left');
+    */
 
     map.on('load', function() {
         console.log("Map loaded");
@@ -574,12 +576,19 @@ function updateMap(data, queryId) {
 
     console.log("Total features for fitMapToFeatures:", allFeatures.features.length);
 
+    //réduire la valeur de maxZoom ou augmenter celle de minZoom
+
     const zoomOptions = {
-        minZoom: queryId === 4 ? 12 : 10,
-        maxZoom: 15,
+        queryId: queryId,  // Ajout de cette ligne pour passer le queryId
+        minZoom: 10,
+        maxZoom: 14,
         padding: { top: 50, bottom: 50, left: 50, right: 50 },
         duration: 1000
     };
+
+    if (queryId === 4 || queryId === 5) {
+        zoomOptions.minZoom = 13;  // Forcer un zoom minimum plus élevé pour les thalwegs en amont/aval
+    }
 
     fitMapToFeatures(allFeatures, zoomOptions);
 
@@ -593,6 +602,7 @@ function updateMap(data, queryId) {
         updateThalwegsInfo(data, 'downstream');
     }
 }
+
 
 function updateInteractions() {
     const layers = ['thalwegs', 'upstreamthalwegs', 'downstreamthalwegs'];
@@ -718,8 +728,6 @@ function fitMapToFeatures(geojson, options = {}) {
     let hasValidFeatures = false;
 
     geojson.features.forEach((feature, index) => {
-        console.log(`Processing feature ${index}:`, JSON.stringify(feature));
-
         if (feature.geometry && feature.geometry.coordinates) {
             if (feature.geometry.type === 'Point' && isValidCoordinate(feature.geometry.coordinates)) {
                 bounds.extend(feature.geometry.coordinates);
@@ -729,17 +737,6 @@ function fitMapToFeatures(geojson, options = {}) {
                     if (isValidCoordinate(coord)) {
                         bounds.extend(coord);
                         hasValidFeatures = true;
-                    } else {
-                        console.warn(`Invalid coordinate in LineString: ${JSON.stringify(coord)}`);
-                    }
-                });
-            } else if (feature.geometry.type === 'Polygon') {
-                feature.geometry.coordinates[0].forEach(coord => {
-                    if (isValidCoordinate(coord)) {
-                        bounds.extend(coord);
-                        hasValidFeatures = true;
-                    } else {
-                        console.warn(`Invalid coordinate in Polygon: ${JSON.stringify(coord)}`);
                     }
                 });
             }
@@ -749,37 +746,37 @@ function fitMapToFeatures(geojson, options = {}) {
     console.log("Bounds after processing:", bounds.toString());
 
     if (hasValidFeatures && !bounds.isEmpty()) {
-        const ne = bounds.getNorthEast();
-        const sw = bounds.getSouthWest();
-        const latDiff = Math.abs(ne.lat - sw.lat);
-        const lngDiff = Math.abs(ne.lng - sw.lng);
-        const maxDiff = Math.max(latDiff, lngDiff);
+        const currentZoom = map.getZoom();
+        const currentCenter = map.getCenter();
 
-        // Calculate appropriate zoom level
-        let zoom = Math.floor(Math.log2(360 / maxDiff)) + 1;
-        console.log("Calculated initial zoom:", zoom);
+        let newZoom;
+        let newCenter;
 
-        // Adjust zoom based on options
-        zoom = Math.min(zoom, options.maxZoom || 15);
-        zoom = Math.max(zoom, options.minZoom || 10);
+        if (options.queryId === 4 || options.queryId === 5) {
+            // Pour les requêtes en amont et en aval, forcer un zoom in plus important
+            newZoom = Math.max(currentZoom + 2, options.minZoom || 12);
+            newCenter = bounds.getCenter();
+        } else {
+            // Pour les autres requêtes, utiliser le zoom calculé normalement
+            const ne = bounds.getNorthEast();
+            const sw = bounds.getSouthWest();
+            const latDiff = Math.abs(ne.lat - sw.lat);
+            const lngDiff = Math.abs(ne.lng - sw.lng);
+            const maxDiff = Math.max(latDiff, lngDiff);
 
-        console.log("Final zoom after adjustments:", zoom);
+            newZoom = Math.floor(Math.log2(360 / maxDiff)) + 1;
+            newZoom = Math.min(Math.max(newZoom, options.minZoom || 10), options.maxZoom || 15);
+            newCenter = bounds.getCenter();
+        }
 
-        const padding = options.padding || { top: 50, bottom: 50, left: 50, right: 50 };
-        const duration = options.duration || 1000;
+        console.log("New zoom level:", newZoom);
+        console.log("New center:", newCenter);
 
-        console.log("Fitting map with options:", {
-            bounds: bounds.toString(),
-            padding,
-            zoom,
-            duration
-        });
-
-        map.fitBounds(bounds, {
-            padding,
-            maxZoom: options.maxZoom || 15,
-            zoom,
-            duration
+        map.flyTo({
+            center: newCenter,
+            zoom: newZoom,
+            padding: options.padding || { top: 50, bottom: 50, left: 50, right: 50 },
+            duration: options.duration || 1000
         });
     } else {
         console.warn('No valid features to fit map to or bounds are empty');
