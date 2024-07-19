@@ -443,7 +443,8 @@ function updateMap(data, queryId) {
                 },
                 properties: {
                     id: node.id,
-                    altitude: node.altitude
+                    altitude: node.altitude,
+                    nodeType: 'other'
                 }
             });
         });
@@ -486,7 +487,7 @@ function updateMap(data, queryId) {
                             id: `${feature.properties.id}-${index === 0 ? 'start' : 'end'}`,
                             parentId: feature.properties.id,
                             parentType: feature.properties.type,
-                            nodeType: index === 0 ? 'start' : 'end'
+                            nodeType: queryId === 4 ? 'upstream' : (queryId === 5 ? 'downstream' : 'other')
                         }
                     });
                 });
@@ -530,16 +531,16 @@ function updateMap(data, queryId) {
     updateLayer(`${layerPrefix}nodes`, nodesGeojson, {
         type: 'circle',
         paint: {
-            'circle-radius': 5,
+            'circle-radius': 2.5,
             'circle-color': [
                 'match',
                 ['get', 'nodeType'],
-                'start', '#00FF00',  // Vert pour le point de départ
-                'end', '#FF0000',    // Rouge pour le point d'arrivée
-                '#B42222'            // Couleur par défaut pour les autres points
+                'upstream', '#00FF00',  // Vert pour les nœuds en amont
+                'downstream', '#FF0000', // Rouge pour les nœuds en aval
+                '#000000'  // Noir pour les autres nœuds
             ],
             'circle-stroke-width': 1,
-            'circle-stroke-color': '#FFFFFF'
+            'circle-stroke-color': '#000000'  // Contour noir pour tous les nœuds
         }
     });
 
