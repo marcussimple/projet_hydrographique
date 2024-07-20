@@ -62,6 +62,19 @@ const queries = [
         type: "interrogation", 
         cypher: "CALL custom.getThalwegAndRidge()",
         customizable: false
+    },
+    {
+        id: 7,
+        text: "Afficher les crêtes en amont en rouge",
+        type: "validation",
+        cypher: `
+        CALL custom.getUpstreamThalwegs($thalwegId) YIELD upstreamId
+        WITH collect(upstreamId) AS upstreamIds
+        MATCH (d:Dale)-[:LIMITE_DR|LIMITE_GC]-(r:Ridge)
+        WHERE d.id IN upstreamIds
+        RETURN DISTINCT r.id AS ridgeId, r.geometry AS ridgeGeometry
+        `,
+        customizable: false
     }
 ];
 
@@ -512,6 +525,48 @@ function updateMap(data, queryId) {
                 });
             }
         });
+    } else if (queryId === 7) {
+        console.log("Processing query 7 results:", data);
+        // Traitement des crêtes en amont
+        data.forEach(ridge => {
+            console.log("Processing ridge:", ridge);
+            if (ridge.coordinates && ridge.coordinates.length > 0) {
+                ridgeLinesGeojson.features.push({
+                    type: 'Feature',
+                    geometry: {
+                        type: 'LineString',
+                        coordinates: ridge.coordinates
+                    },
+                    properties: {
+                        id: ridge.id,
+                        type: 'upstream-ridge'
+                    }
+                });
+            } else {
+                console.warn("Ridge with invalid coordinates:", ridge);
+            }
+        });
+    
+        console.log(`Total ridges found: ${ridgeLinesGeojson.features.length}`);
+        console.log("Ridge GeoJSON:", ridgeLinesGeojson);
+    
+        if (ridgeLinesGeojson.features.length === 0) {
+            showMessage("Aucune crête en amont trouvée pour le thalweg sélectionné.");
+        } else {
+            showMessage(`${ridgeLinesGeojson.features.length} crêtes en amont trouvées et affichées en rouge.`);
+        }
+    
+        updateLayer('upstream-ridges', ridgeLinesGeojson, {
+            type: 'line',
+            layout: {
+                'line-join': 'round',
+                'line-cap': 'round'
+            },
+            paint: {
+                'line-color': '#FF0000', // Rouge pour les crêtes en amont
+                'line-width': 2
+            }
+        });
     }
 
     console.log("Thalweg features:", thalwegLinesGeojson.features.length);
@@ -548,6 +603,32 @@ function updateMap(data, queryId) {
         });
     }
 
+    if (queryId === 7) {
+        updateLayer('upstream-ridges', ridgeLinesGeojson, {
+            type: 'line',
+            layout: {
+                'line-join': 'round',
+                'line-cap': 'round'
+            },
+            paint: {
+                'line-color': '#FF0000', // Rouge pour les crêtes en amont
+                'line-width': 2
+            }
+        });
+        
+        updateLayer('upstream-thalwegs', thalwegLinesGeojson, {
+            type: 'line',
+            layout: {
+                'line-join': 'round',
+                'line-cap': 'round'
+            },
+            paint: {
+                'line-color': '#00FF00', // Vert pour les thalwegs en amont
+                'line-width': 1
+            }
+        });
+    }
+
     updateLayer(`${layerPrefix}nodes`, nodesGeojson, {
         type: 'circle',
         paint: {
@@ -576,18 +657,16 @@ function updateMap(data, queryId) {
 
     console.log("Total features for fitMapToFeatures:", allFeatures.features.length);
 
-    //réduire la valeur de maxZoom ou augmenter celle de minZoom
-
     const zoomOptions = {
-        queryId: queryId,  // Ajout de cette ligne pour passer le queryId
+        queryId: queryId,
         minZoom: 10,
         maxZoom: 14,
         padding: { top: 50, bottom: 50, left: 50, right: 50 },
         duration: 1000
     };
 
-    if (queryId === 4 || queryId === 5) {
-        zoomOptions.minZoom = 13;  // Forcer un zoom minimum plus élevé pour les thalwegs en amont/aval
+    if (queryId === 4 || queryId === 5 || queryId === 7) {
+        zoomOptions.minZoom = 13;  // Forcer un zoom minimum plus élevé pour les thalwegs en amont/aval et les crêtes
     }
 
     fitMapToFeatures(allFeatures, zoomOptions);
@@ -600,6 +679,12 @@ function updateMap(data, queryId) {
         updateThalwegsInfo(data, 'upstream');
     } else if (queryId === 5) {
         updateThalwegsInfo(data, 'downstream');
+    } else if (queryId === 7) {
+        updateUpstreamRidgesInfo(data);
+    }
+
+    if (queryId === 7 && ridgeLinesGeojson.features.length === 0) {
+        showMessage("Aucune crête en amont trouvée pour le thalweg sélectionné.");
     }
 }
 

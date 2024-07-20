@@ -85,7 +85,9 @@ def execute_query(request):
                 logger.info(f"Raw records count: {len(records)}")
                 logger.debug(f"First few records: {records[:5]}")
 
-                if query_id in [4, 5]:  # Requêtes pour thalwegs en amont/aval
+                if query_id == 7:  # Requête pour les crêtes en amont
+                    formatted_results = format_upstream_ridges_results(records)
+                elif query_id in [4, 5]:  # Requêtes pour thalwegs en amont/aval
                     formatted_results = format_upstream_downstream_results(records)
                 else:
                     formatted_results = []
@@ -108,8 +110,6 @@ def execute_query(request):
             except Exception as e:
                 logger.error(f"Error executing query: {str(e)}", exc_info=True)
                 return JsonResponse({"error": str(e)}, status=500)
-    
-    return JsonResponse({"error": "Method not allowed"}, status=405)
 
 
 @csrf_exempt
@@ -151,26 +151,41 @@ def log_detailed_results(records):
                 print(f"End node: {rel.end_node}")
 
 
-def format_upstream_downstream_results(records):
+def format_upstream_ridges_results(records):
     formatted_results = []
     for record in records:
-        geometry_key = 'upstreamGeometry' if 'upstreamGeometry' in record else 'downstreamGeometry'
-        id_key = 'upstreamId' if 'upstreamId' in record else 'downstreamId'
-        thalweg_coordinates = parse_linestring(record[geometry_key])
-        
-        if thalweg_coordinates:
+        ridge_coordinates = parse_linestring(record['ridgeGeometry'])
+        if ridge_coordinates:
             formatted_result = {
-                "id": record[id_key],
-                "type": "thalweg",
-                "coordinates": thalweg_coordinates,
-                "depth": record['depth'],
-                "valleyId": record['valleyId'],
-                "accumulation": None,  # Ces valeurs peuvent être ajoutées si disponibles
-                "slope": None
+                "id": record['ridgeId'],
+                "coordinates": ridge_coordinates
             }
             formatted_results.append(formatted_result)
-        else:
-            logger.warning(f"Empty coordinates for thalweg {record[id_key]}")
     
-    logger.info(f"Formatted {len(formatted_results)} upstream/downstream thalwegs")
+    logger.info(f"Formatted {len(formatted_results)} upstream ridges")
+    logger.debug(f"Sample of formatted results: {formatted_results[:2]}")
+    return formatted_results
+
+
+# fonction pour formater les résultats des crêtes en amont
+def format_upstream_ridges_results(records):
+    formatted_results = []
+    for record in records:
+        logger.debug(f"Processing record: {record}")
+        if 'ridgeGeometry' in record:
+            ridge_coordinates = parse_linestring(record['ridgeGeometry'])
+            if ridge_coordinates:
+                formatted_result = {
+                    "id": record.get('ridgeId', 'unknown'),
+                    "coordinates": ridge_coordinates,
+                    "type": "ridge"
+                }
+                formatted_results.append(formatted_result)
+            else:
+                logger.warning(f"Failed to parse ridge geometry: {record['ridgeGeometry']}")
+        else:
+            logger.warning(f"Record missing ridgeGeometry: {record}")
+    
+    logger.info(f"Formatted {len(formatted_results)} upstream ridges")
+    logger.debug(f"Sample of formatted results: {formatted_results[:2]}")
     return formatted_results
