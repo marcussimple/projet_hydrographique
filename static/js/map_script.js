@@ -548,7 +548,6 @@ function updateMap(data, queryId) {
 
     // Mise à jour des couches
     if (queryId !== 7) {
-        // Pour toutes les requêtes sauf la 7, mettre à jour la couche des thalwegs
         const layerPrefix = queryId === 4 ? 'upstream' : (queryId === 5 ? 'downstream' : '');
         const thalwegColor = queryId === 4 ? '#00FF00' : (queryId === 5 ? '#FE2E2E' : '#0000FF');
 
@@ -580,7 +579,6 @@ function updateMap(data, queryId) {
     }
 
     if (queryId === 7) {
-        // Pour la requête 7, ajouter seulement la couche des crêtes en amont
         updateLayer('upstream-ridges', ridgeLinesGeojson, {
             type: 'line',
             layout: {
@@ -590,6 +588,37 @@ function updateMap(data, queryId) {
             paint: {
                 'line-color': '#FF0000', // Rouge pour les crêtes en amont
                 'line-width': 2
+            }
+        });
+    }
+
+    if (map.getSource('permanent-nodes')) {
+        // Si la source existe déjà, ajoutez les nouveaux nœuds aux existants
+        const existingNodes = map.getSource('permanent-nodes')._data.features;
+        const newNodeIds = new Set(nodesGeojson.features.map(f => f.properties.id));
+        const updatedNodes = [
+            ...existingNodes.filter(f => !newNodeIds.has(f.properties.id)),
+            ...nodesGeojson.features
+        ];
+        map.getSource('permanent-nodes').setData({
+            type: 'FeatureCollection',
+            features: updatedNodes
+        });
+    } else {
+        // Si la source n'existe pas, créez-la
+        map.addSource('permanent-nodes', {
+            type: 'geojson',
+            data: nodesGeojson
+        });
+        map.addLayer({
+            id: 'permanent-nodes',
+            type: 'circle',
+            source: 'permanent-nodes',
+            paint: {
+                'circle-radius': 3,
+                'circle-color': '#000000',  // Noir pour tous les nœuds
+                'circle-stroke-width': 1,
+                'circle-stroke-color': '#FFFFFF'  // Contour blanc pour tous les nœuds
             }
         });
     }
@@ -657,7 +686,8 @@ function updateMap(data, queryId) {
 
 
 function updateInteractions() {
-    const layers = ['thalwegs', 'upstreamthalwegs', 'downstreamthalwegs'];
+    const layers = ['thalwegs', 'upstreamthalwegs', 'downstreamthalwegs', 'permanent-nodes'];
+
     
     layers.forEach(layer => {
         if (map.getLayer(layer)) {
