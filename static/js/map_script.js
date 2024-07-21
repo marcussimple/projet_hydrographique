@@ -620,8 +620,8 @@ function updateMap(data, queryId) {
             },
             paint: {
                 'line-color': '#FFFFFF', // Halo blanc
-                'line-width': 10,
-                'line-opacity': 1
+                'line-width': 7.5,
+                'line-opacity': 0.8
             }
         });
     
@@ -640,6 +640,35 @@ function updateMap(data, queryId) {
     
         // Assurez-vous que la couche principale est au-dessus du halo
         map.moveLayer('upstream-ridges', 'upstream-ridges-halo');
+    
+        // Création du polygone du bassin versant
+        const uniqueRidges = ridgeLinesGeojson.features.filter(feature => feature.properties.duplicated === 0);
+        
+        if (uniqueRidges.length > 0) {
+            // Extraire tous les points des crêtes uniques
+            const allPoints = uniqueRidges.flatMap(feature => feature.geometry.coordinates);
+            
+            // Trouver l'enveloppe convexe (convex hull) des points
+            const hull = turf.convex(turf.multiPoint(allPoints));
+            
+            if (hull) {
+                // Créer une source et une couche pour le polygone du bassin versant
+                updateLayer('watershed-polygon', {
+                    type: 'Feature',
+                    geometry: hull.geometry,
+                    properties: {}
+                }, {
+                    type: 'fill',
+                    paint: {
+                        'fill-color': '#87CEFA',  // Couleur bleu clair
+                        'fill-opacity': 0.3
+                    }
+                });
+    
+                // S'assurer que le polygone est en dessous des autres couches
+                map.moveLayer('watershed-polygon', 'upstream-ridges-halo');
+            }
+        }
     
         // Mise à jour des informations affichées
         updateUpstreamRidgesInfo(data);
