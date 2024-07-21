@@ -317,6 +317,12 @@ function zoomToThalweg(coordinates) {
     }
 }
 
+function ensureNodesOnTop() {
+    if (map.getLayer('permanent-nodes')) {
+        map.moveLayer('permanent-nodes');
+    }
+}
+
 function updateSelectedThalwegInfo(properties) {
     const infoDiv = document.getElementById('selected-thalweg-info');
     infoDiv.innerHTML = `
@@ -476,7 +482,7 @@ function updateMap(data, queryId) {
                 console.warn(`Invalid node coordinates: [${node.longitude}, ${node.latitude}]`);
             }
         });
-    } else if (queryId === 2 || queryId === 4 || queryId === 5 || queryId === 6) {
+    } else if (queryId === 2 || queryId === 4 || queryId === 5 || queryId === 6 || queryId === 7) {
         // Traitement des thalwegs et ridges
         data.forEach(item => {
             const coordinates = item.coordinates || parseLineString(item.geometry);
@@ -497,7 +503,7 @@ function updateMap(data, queryId) {
                     }
                 };
 
-                if (item.type === 'ridge') {
+                if (item.type === 'ridge' || queryId === 7) {
                     ridgeLinesGeojson.features.push(feature);
                 } else {
                     thalwegLinesGeojson.features.push(feature);
@@ -516,26 +522,9 @@ function updateMap(data, queryId) {
                                 id: `${feature.properties.id}-${index === 0 ? 'start' : 'end'}`,
                                 parentId: feature.properties.id,
                                 parentType: feature.properties.type,
-                                nodeType: queryId === 4 ? 'upstream' : (queryId === 5 ? 'downstream' : 'other')
+                                nodeType: 'other'
                             }
                         });
-                    }
-                });
-            }
-        });
-    } else if (queryId === 7) {
-        // Traitement des crêtes en amont
-        data.forEach(ridge => {
-            if (ridge.coordinates && ridge.coordinates.length > 0) {
-                ridgeLinesGeojson.features.push({
-                    type: 'Feature',
-                    geometry: {
-                        type: 'LineString',
-                        coordinates: ridge.coordinates
-                    },
-                    properties: {
-                        id: ridge.id,
-                        type: 'upstream-ridge'
                     }
                 });
             }
@@ -592,6 +581,7 @@ function updateMap(data, queryId) {
         });
     }
 
+    // Mise à jour de la couche des nœuds
     if (map.getSource('permanent-nodes')) {
         // Si la source existe déjà, ajoutez les nouveaux nœuds aux existants
         const existingNodes = map.getSource('permanent-nodes')._data.features;
@@ -623,21 +613,8 @@ function updateMap(data, queryId) {
         });
     }
 
-    updateLayer(`nodes`, nodesGeojson, {
-        type: 'circle',
-        paint: {
-            'circle-radius': 2.5,
-            'circle-color': [
-                'match',
-                ['get', 'nodeType'],
-                'upstream', '#00FF00',  // Vert pour les nœuds en amont
-                'downstream', '#FF0000', // Rouge pour les nœuds en aval
-                '#000000'  // Noir pour les autres nœuds
-            ],
-            'circle-stroke-width': 1,
-            'circle-stroke-color': '#000000'  // Contour noir pour tous les nœuds
-        }
-    });
+    // Assurez-vous que les nœuds sont au-dessus de toutes les autres couches
+    ensureNodesOnTop();
 
     // Combiner toutes les caractéristiques pour le zoom
     const allFeatures = {
@@ -659,8 +636,10 @@ function updateMap(data, queryId) {
         duration: 1000
     };
 
-    if (queryId === 4 || queryId === 5 || queryId === 7) {
-        zoomOptions.minZoom = 13;  // Forcer un zoom minimum plus élevé pour les thalwegs en amont/aval et les crêtes
+    if (queryId === 4 || queryId === 5) {
+        zoomOptions.minZoom = 13;  // Forcer un zoom minimum plus élevé pour les thalwegs en amont/aval
+    } else if (queryId === 7) {
+        zoomOptions.maxZoom = 12;  // Limiter le zoom maximum pour les crêtes en amont
     }
 
     fitMapToFeatures(allFeatures, zoomOptions);
@@ -681,6 +660,12 @@ function updateMap(data, queryId) {
         showMessage("Aucune crête en amont trouvée pour le thalweg sélectionné.");
     } else if (queryId === 7) {
         showMessage(`${ridgeLinesGeojson.features.length} crêtes en amont trouvées et affichées en rouge.`);
+    }
+}
+
+function ensureNodesOnTop() {
+    if (map.getLayer('permanent-nodes')) {
+        map.moveLayer('permanent-nodes');
     }
 }
 
@@ -763,6 +748,9 @@ function updateLayer(layerId, geojsonData, layerOptions) {
             ...layerOptions
         });
     }
+    
+    // Assurez-vous que les nœuds restent toujours au-dessus
+    ensureNodesOnTop();
 }
 
 function addEndpoints(thalweg, endpointsGeojson, isUpstream = false) {
@@ -834,12 +822,16 @@ function fitMapToFeatures(geojson, options = {}) {
         let newZoom;
         let newCenter;
 
-        if (options.queryId === 4 || options.queryId === 5) {
-            // Pour les requêtes en amont et en aval, forcer un zoom in plus important
+        if (options.queryId === 7) {
+            // Pour la requête 7, on diminue le zoom
+            newZoom = Math.max(currentZoom - 1, options.minZoom || 10);
+            newCenter = bounds.getCenter();
+        } else if (options.queryId === 4 || options.queryId === 5) {
+            // Pour les requêtes en amont et en aval, on garde le zoom in plus important
             newZoom = Math.max(currentZoom + 2, options.minZoom || 12);
             newCenter = bounds.getCenter();
         } else {
-            // Pour les autres requêtes, utiliser le zoom calculé normalement
+            // Pour les autres requêtes, on utilise le zoom calculé normalement
             const ne = bounds.getNorthEast();
             const sw = bounds.getSouthWest();
             const latDiff = Math.abs(ne.lat - sw.lat);
