@@ -437,8 +437,6 @@ function parseRidgeGeometry(geometryString) {
 }
 
 
-
-
 function updateMap(data, queryId) {
     console.log("Updating map with data:", data);
     console.log("Query ID:", queryId);
@@ -526,10 +524,8 @@ function updateMap(data, queryId) {
             }
         });
     } else if (queryId === 7) {
-        console.log("Processing query 7 results:", data);
         // Traitement des crêtes en amont
         data.forEach(ridge => {
-            console.log("Processing ridge:", ridge);
             if (ridge.coordinates && ridge.coordinates.length > 0) {
                 ridgeLinesGeojson.features.push({
                     type: 'Feature',
@@ -542,29 +538,6 @@ function updateMap(data, queryId) {
                         type: 'upstream-ridge'
                     }
                 });
-            } else {
-                console.warn("Ridge with invalid coordinates:", ridge);
-            }
-        });
-    
-        console.log(`Total ridges found: ${ridgeLinesGeojson.features.length}`);
-        console.log("Ridge GeoJSON:", ridgeLinesGeojson);
-    
-        if (ridgeLinesGeojson.features.length === 0) {
-            showMessage("Aucune crête en amont trouvée pour le thalweg sélectionné.");
-        } else {
-            showMessage(`${ridgeLinesGeojson.features.length} crêtes en amont trouvées et affichées en rouge.`);
-        }
-    
-        updateLayer('upstream-ridges', ridgeLinesGeojson, {
-            type: 'line',
-            layout: {
-                'line-join': 'round',
-                'line-cap': 'round'
-            },
-            paint: {
-                'line-color': '#FF0000', // Rouge pour les crêtes en amont
-                'line-width': 2
             }
         });
     }
@@ -574,20 +547,23 @@ function updateMap(data, queryId) {
     console.log("Node features:", nodesGeojson.features.length);
 
     // Mise à jour des couches
-    const layerPrefix = queryId === 4 ? 'upstream' : (queryId === 5 ? 'downstream' : '');
-    const thalwegColor = queryId === 4 ? '#00FF00' : (queryId === 5 ? '#FE2E2E' : '#0000FF');
+    if (queryId !== 7) {
+        // Pour toutes les requêtes sauf la 7, mettre à jour la couche des thalwegs
+        const layerPrefix = queryId === 4 ? 'upstream' : (queryId === 5 ? 'downstream' : '');
+        const thalwegColor = queryId === 4 ? '#00FF00' : (queryId === 5 ? '#FE2E2E' : '#0000FF');
 
-    updateLayer(`${layerPrefix}thalwegs`, thalwegLinesGeojson, {
-        type: 'line',
-        layout: {
-            'line-join': 'round',
-            'line-cap': 'round'
-        },
-        paint: {
-            'line-color': thalwegColor,
-            'line-width': 3
-        }
-    });
+        updateLayer(`${layerPrefix}thalwegs`, thalwegLinesGeojson, {
+            type: 'line',
+            layout: {
+                'line-join': 'round',
+                'line-cap': 'round'
+            },
+            paint: {
+                'line-color': thalwegColor,
+                'line-width': 3
+            }
+        });
+    }
 
     if (queryId === 6) {
         updateLayer('ridges', ridgeLinesGeojson, {
@@ -604,6 +580,7 @@ function updateMap(data, queryId) {
     }
 
     if (queryId === 7) {
+        // Pour la requête 7, ajouter seulement la couche des crêtes en amont
         updateLayer('upstream-ridges', ridgeLinesGeojson, {
             type: 'line',
             layout: {
@@ -615,21 +592,9 @@ function updateMap(data, queryId) {
                 'line-width': 2
             }
         });
-        
-        updateLayer('upstream-thalwegs', thalwegLinesGeojson, {
-            type: 'line',
-            layout: {
-                'line-join': 'round',
-                'line-cap': 'round'
-            },
-            paint: {
-                'line-color': '#00FF00', // Vert pour les thalwegs en amont
-                'line-width': 1
-            }
-        });
     }
 
-    updateLayer(`${layerPrefix}nodes`, nodesGeojson, {
+    updateLayer(`nodes`, nodesGeojson, {
         type: 'circle',
         paint: {
             'circle-radius': 2.5,
@@ -685,6 +650,8 @@ function updateMap(data, queryId) {
 
     if (queryId === 7 && ridgeLinesGeojson.features.length === 0) {
         showMessage("Aucune crête en amont trouvée pour le thalweg sélectionné.");
+    } else if (queryId === 7) {
+        showMessage(`${ridgeLinesGeojson.features.length} crêtes en amont trouvées et affichées en rouge.`);
     }
 }
 
