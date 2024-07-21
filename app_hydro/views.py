@@ -172,19 +172,15 @@ def format_upstream_ridges_results(records):
     formatted_results = []
     for record in records:
         logger.debug(f"Processing record: {record}")
-        if 'ridgeGeometry' in record:
-            ridge_coordinates = parse_linestring(record['ridgeGeometry'])
-            if ridge_coordinates:
-                formatted_result = {
-                    "id": record.get('ridgeId', 'unknown'),
-                    "coordinates": ridge_coordinates,
-                    "type": "ridge"
-                }
-                formatted_results.append(formatted_result)
-            else:
-                logger.warning(f"Failed to parse ridge geometry: {record['ridgeGeometry']}")
+        if 'ridgeGeometry' in record and 'ridgeId' in record:
+            formatted_result = {
+                "ridgeId": record['ridgeId'],
+                "ridgeGeometry": record['ridgeGeometry'],
+                "duplicated": record.get('duplicated', 0)
+            }
+            formatted_results.append(formatted_result)
         else:
-            logger.warning(f"Record missing ridgeGeometry: {record}")
+            logger.warning(f"Record missing required fields: {record}")
     
     logger.info(f"Formatted {len(formatted_results)} upstream ridges")
     logger.debug(f"Sample of formatted results: {formatted_results[:2]}")

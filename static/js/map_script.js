@@ -72,7 +72,12 @@ const queries = [
         WITH collect(upstreamId) AS upstreamIds
         MATCH (d:Dale)-[:LIMITE_DR|LIMITE_GC]-(r:Ridge)
         WHERE d.id IN upstreamIds
-        RETURN DISTINCT r.id AS ridgeId, r.geometry AS ridgeGeometry
+        WITH r.id AS ridgeId, r.geometry AS ridgeGeometry, count(*) AS occurrences
+        RETURN DISTINCT 
+            ridgeId,
+            ridgeGeometry,
+            CASE WHEN occurrences > 1 THEN 1 ELSE 0 END AS duplicated
+        ORDER BY ridgeId
         `,
         customizable: false
     }
@@ -228,8 +233,13 @@ function toggleQueryList(type) {
 }
 
 function parseLineString(geometryString) {
+    if (!geometryString || typeof geometryString !== 'string') {
+        console.warn('Invalid geometry string:', geometryString);
+        return null;
+    }
+
     const match = geometryString.match(/LINESTRING Z \((.*)\)/);
-    if (match) {
+    if (match && match[1]) {
         const coordinates = match[1].split(', ').map(coord => {
             const [lon, lat, z] = coord.split(' ').map(parseFloat);
             if (isValidCoordinate([lon, lat])) {
@@ -240,6 +250,7 @@ function parseLineString(geometryString) {
         }).filter(coord => coord !== null);
         return coordinates.length > 0 ? coordinates : null;
     }
+    console.warn('Could not parse geometry string:', geometryString);
     return null;
 }
 
@@ -499,7 +510,8 @@ function updateMap(data, queryId) {
                         accumulation: item.accumulation,
                         slope: item.slope,
                         depth: item.depth,
-                        valleyId: item.valleyId
+                        valleyId: item.valleyId,
+                        duplicated: item.duplicated
                     }
                 };
 
@@ -568,6 +580,52 @@ function updateMap(data, queryId) {
     }
 
     if (queryId === 7) {
+        // Traitement des crêtes en amont
+        data.forEach(item => {
+            if (item.ridgeGeometry) {
+                const coordinates = parseLineString(item.ridgeGeometry);
+                if (coordinates && coordinates.length > 0) {
+                    const feature = {
+                        type: 'Feature',
+                        geometry: {
+                            type: 'LineString',
+                            coordinates: coordinates
+                        },
+                        properties: {
+                            id: item.ridgeId,
+                            type: 'ridge',
+                            duplicated: item.duplicated
+                        }
+                    };
+                    ridgeLinesGeojson.features.push(feature);
+                } else {
+                    console.warn(`Invalid or empty coordinates for ridge: ${item.ridgeId}`);
+                }
+            } else {
+                console.warn(`Missing ridgeGeometry for item:`, item);
+            }
+        });
+    
+        // Ajout du halo blanc pour les crêtes non dupliquées
+        const uniqueRidgesGeojson = {
+            type: 'FeatureCollection',
+            features: ridgeLinesGeojson.features.filter(feature => feature.properties.duplicated === 0)
+        };
+    
+        updateLayer('upstream-ridges-halo', uniqueRidgesGeojson, {
+            type: 'line',
+            layout: {
+                'line-join': 'round',
+                'line-cap': 'round'
+            },
+            paint: {
+                'line-color': '#FFFFFF', // Halo blanc
+                'line-width': 10,
+                'line-opacity': 1
+            }
+        });
+    
+        // Couche principale pour toutes les crêtes
         updateLayer('upstream-ridges', ridgeLinesGeojson, {
             type: 'line',
             layout: {
@@ -579,6 +637,27 @@ function updateMap(data, queryId) {
                 'line-width': 2
             }
         });
+    
+        // Assurez-vous que la couche principale est au-dessus du halo
+        map.moveLayer('upstream-ridges', 'upstream-ridges-halo');
+    
+        // Mise à jour des informations affichées
+        updateUpstreamRidgesInfo(data);
+    
+        // Zoom sur toutes les crêtes
+        fitMapToFeatures(ridgeLinesGeojson, {
+            padding: { top: 50, bottom: 50, left: 50, right: 50 },
+            maxZoom: 12
+        });
+    
+        // Afficher un message
+        if (ridgeLinesGeojson.features.length === 0) {
+            showMessage("Aucune crête en amont trouvée pour le thalweg sélectionné.");
+        } else {
+            const uniqueCount = uniqueRidgesGeojson.features.length;
+            const duplicatedCount = ridgeLinesGeojson.features.length - uniqueCount;
+            showMessage(`${ridgeLinesGeojson.features.length} crêtes en amont trouvées. ${uniqueCount} uniques (avec halo blanc) et ${duplicatedCount} dupliquées.`);
+        }
     }
 
     // Mise à jour de la couche des nœuds
@@ -722,15 +801,12 @@ function updateThalwegsInfo(thalwegs, type) {
 
 function updateUpstreamRidgesInfo(data) {
     const infoDiv = document.getElementById('upstream-thalwegs-info');
-    infoDiv.innerHTML = data.flatMap(thalweg => 
-        thalweg.ridges.map((ridge, index) => `
-            <div class="ridge-info ${index % 2 === 0 ? 'even' : 'odd'}" style="background-color: #FFC0CB;">
-                <p><strong>Ridge ID:</strong> ${ridge.id}</p>
-                <p><strong>Thalweg associé:</strong> ${thalweg.upstreamId}</p>
-                <p><strong>Profondeur du thalweg:</strong> ${thalweg.depth}</p>
-            </div>
-        `)
-    ).join('');
+    infoDiv.innerHTML = data.map((ridge, index) => `
+        <div class="ridge-info ${index % 2 === 0 ? 'even' : 'odd'}" style="background-color: ${ridge.duplicated === 0 ? '#90EE90' : '#FFA07A'};">
+            <p><strong>Ridge ID:</strong> ${ridge.ridgeId}</p>
+            <p><strong>Statut:</strong> ${ridge.duplicated === 0 ? 'Unique' : 'Dupliqué'}</p>
+        </div>
+    `).join('');
 }
 
 
