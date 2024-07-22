@@ -606,12 +606,13 @@ function updateMap(data, queryId) {
             }
         });
     
-        // Ajout du halo blanc pour les crêtes non dupliquées
+        // Filtrer les crêtes uniques (non dupliquées)
         const uniqueRidgesGeojson = {
             type: 'FeatureCollection',
             features: ridgeLinesGeojson.features.filter(feature => feature.properties.duplicated === 0)
         };
     
+        // Ajout du halo blanc pour les crêtes non dupliquées
         updateLayer('upstream-ridges-halo', uniqueRidgesGeojson, {
             type: 'line',
             layout: {
@@ -620,8 +621,8 @@ function updateMap(data, queryId) {
             },
             paint: {
                 'line-color': '#FFFFFF', // Halo blanc
-                'line-width': 7.5,
-                'line-opacity': 0.8
+                'line-width': 5,
+                'line-opacity': 0.6
             }
         });
     
@@ -642,22 +643,23 @@ function updateMap(data, queryId) {
         map.moveLayer('upstream-ridges', 'upstream-ridges-halo');
     
         // Création du polygone du bassin versant
-        const uniqueRidges = ridgeLinesGeojson.features.filter(feature => feature.properties.duplicated === 0);
-        
-        if (uniqueRidges.length > 0) {
-            // Extraire tous les points des crêtes uniques
-            const allPoints = uniqueRidges.flatMap(feature => feature.geometry.coordinates);
+        if (uniqueRidgesGeojson.features.length > 0) {
+            // Fusionner toutes les lignes uniques en une seule MultiLineString
+            const mergedLines = turf.multiLineString(
+                uniqueRidgesGeojson.features.map(feature => feature.geometry.coordinates)
+            );
             
-            // Trouver l'enveloppe convexe (convex hull) des points
-            const hull = turf.convex(turf.multiPoint(allPoints));
+            // Créer un polygone à partir de la MultiLineString
+            const polygon = turf.polygonize(mergedLines);
             
-            if (hull) {
+            if (polygon && polygon.features.length > 0) {
+                // Prendre le plus grand polygone si plusieurs sont créés
+                const largestPolygon = polygon.features.reduce((a, b) => 
+                    turf.area(a) > turf.area(b) ? a : b
+                );
+                
                 // Créer une source et une couche pour le polygone du bassin versant
-                updateLayer('watershed-polygon', {
-                    type: 'Feature',
-                    geometry: hull.geometry,
-                    properties: {}
-                }, {
+                updateLayer('watershed-polygon', largestPolygon, {
                     type: 'fill',
                     paint: {
                         'fill-color': '#87CEFA',  // Couleur bleu clair
