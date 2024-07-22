@@ -621,7 +621,7 @@ function updateMap(data, queryId) {
             },
             paint: {
                 'line-color': '#FFFFFF', // Halo blanc
-                'line-width': 5,
+                'line-width': 2,
                 'line-opacity': 0.6
             }
         });
@@ -634,8 +634,8 @@ function updateMap(data, queryId) {
                 'line-cap': 'round'
             },
             paint: {
-                'line-color': '#FF0000', // Rouge pour les crêtes en amont
-                'line-width': 2
+                'line-color': '#FFA500', // Couleur des crêtes en amont
+                'line-width': 4
             }
         });
     
@@ -662,8 +662,8 @@ function updateMap(data, queryId) {
                 updateLayer('watershed-polygon', largestPolygon, {
                     type: 'fill',
                     paint: {
-                        'fill-color': '#87CEFA',  // Couleur bleu clair
-                        'fill-opacity': 0.3
+                        'fill-color': '#3F612D',  // Couleur du bassin versant
+                        'fill-opacity': 0.6
                     }
                 });
     
