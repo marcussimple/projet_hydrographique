@@ -1,5 +1,6 @@
 // Initialisation de Mapbox
 mapboxgl.accessToken = 'pk.eyJ1IjoibWFyY3Vzc2ltcGxlIiwiYSI6ImNseTNvb3hobzA5cWsybHBvenRmdHNxcmwifQ.ZQAMdmO7CT--DCeE1pLF_g';
+//mapboxgl.accessToken = 'pk.eyJ1IjoibWFyY3Vzc2ltcGxlIiwiYSI6ImNseTNvb3hobzA5cWsybHBvenRmdHNxcmwifQ.ZQAMdmO7CT--DCeE1pLF_g';
 var map;
 let selectedThalwegId = null;
 let isSelectingThalweg = false;
@@ -92,7 +93,11 @@ function initializeMap() {
     console.log("Initializing map");
     map = new mapboxgl.Map({
         container: 'map', // assurez-vous que cet élément existe dans votre HTML
-        style: 'mapbox://styles/mapbox/streets-v11',
+        style: 'mapbox://styles/marcussimple/clyyxih1801ac01qo70gbc8aj',
+        //'mapbox://styles/marcussimple/clyyunv50019h01qobs570m2b',
+
+        //'mapbox://styles/marcussimple/clyy0bovz012001nxacpugtfl',
+       // style: 'mapbox://styles/mapbox/streets-v11',
         center: [-74.82608900230738, 45.76895453076196],
         zoom: 10
     });
@@ -634,8 +639,8 @@ function updateMap(data, queryId) {
                 'line-cap': 'round'
             },
             paint: {
-                'line-color': '#FFA500', // Couleur des crêtes en amont
-                'line-width': 4
+                'line-color': '#FF0000', // Couleur des crêtes en amont
+                'line-width': 5
             }
         });
     
