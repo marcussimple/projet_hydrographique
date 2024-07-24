@@ -626,7 +626,7 @@ function updateMap(data, queryId) {
             },
             paint: {
                 'line-color': '#000000', // Halo blanc
-                'line-width': 2,
+                'line-width': 3,
                 'line-opacity': 0.6
             }
         });
@@ -649,32 +649,138 @@ function updateMap(data, queryId) {
     
         // Création du polygone du bassin versant
         if (uniqueRidgesGeojson.features.length > 0) {
-            // Fusionner toutes les lignes uniques en une seule MultiLineString
-            const mergedLines = turf.multiLineString(
-                uniqueRidgesGeojson.features.map(feature => feature.geometry.coordinates)
-            );
-            
-            // Créer un polygone à partir de la MultiLineString
-            const polygon = turf.polygonize(mergedLines);
-            
-            if (polygon && polygon.features.length > 0) {
-                // Prendre le plus grand polygone si plusieurs sont créés
-                const largestPolygon = polygon.features.reduce((a, b) => 
-                    turf.area(a) > turf.area(b) ? a : b
+            try {
+                const mergedLines = turf.multiLineString(
+                    uniqueRidgesGeojson.features.map(feature => feature.geometry.coordinates)
                 );
                 
-                // Créer une source et une couche pour le polygone du bassin versant
-                updateLayer('watershed-polygon', largestPolygon, {
-                    type: 'fill',
-                    paint: {
-                        'fill-color': '#FFFFFF',  // Couleur du bassin versant
-                        'fill-opacity': 0.6
+                let watershedPolygon;
+                let innerPolygons;
+                try {
+                    const polygonized = turf.polygonize(mergedLines);
+                    if (polygonized.features.length > 0) {
+                        // Trouver le plus grand polygone (le bassin versant principal)
+                        watershedPolygon = polygonized.features.reduce((a, b) => 
+                            turf.area(a) > turf.area(b) ? a : b
+                        );
+        
+                        // Identifier les polygones intérieurs
+                        innerPolygons = polygonized.features.filter(feature => 
+                            feature !== watershedPolygon && turf.booleanWithin(feature, watershedPolygon)
+                        );
+        
+                        // Créer un multipolygone avec le bassin versant principal et les trous
+                        if (innerPolygons.length > 0) {
+                            watershedPolygon = turf.multiPolygon([
+                                watershedPolygon.geometry.coordinates,
+                                ...innerPolygons.map(p => p.geometry.coordinates)
+                            ]);
+                        }
                     }
-                });
-    
-                // S'assurer que le polygone est en dessous des autres couches
-                map.moveLayer('watershed-polygon', 'upstream-ridges-halo');
+                } catch (polygonizeError) {
+                    console.warn("Erreur lors de la polygonisation:", polygonizeError);
+                    watershedPolygon = turf.buffer(mergedLines, 0.001, {units: 'kilometers'});
+                    innerPolygons = [];
+                }
+        
+                if (watershedPolygon) {
+                    // Créer une source et une couche pour le polygone du bassin versant principal
+                    updateLayer('watershed-polygon', watershedPolygon, {
+                        type: 'fill',
+                        paint: {
+                            'fill-color': '#3F612D',
+                            'fill-opacity': 0.5
+                        }
+                    });
+        
+                    // Créer une source et une couche pour les polygones intérieurs
+                    if (innerPolygons && innerPolygons.length > 0) {
+                        const innerPolygonsFeatureCollection = turf.featureCollection(innerPolygons);
+                        updateLayer('inner-polygons', innerPolygonsFeatureCollection, {
+                            type: 'fill',
+                            paint: {
+                                'fill-color': '#3D4E4F',  // Couleur rouge pour les polygones intérieurs
+                                'fill-opacity': 0.7
+                            }
+                        });
+        
+                        // S'assurer que la couche des polygones intérieurs est au-dessus du bassin versant principal
+                        map.moveLayer('inner-polygons', 'watershed-polygon');
+                    }
+        
+                    // S'assurer que le polygone du bassin versant est en dessous des autres couches
+                    map.moveLayer('watershed-polygon', 'upstream-ridges-halo');
+                    if (map.getLayer('inner-polygons')) {
+                        map.moveLayer('inner-polygons', 'watershed-polygon');
+                    }
+                    
+                    // Fonction pour filtrer les features à l'intérieur du bassin versant
+                    function filterFeaturesInWatershed(features, watershed) {
+                        return features.filter(feature => {
+                            if (feature.geometry.type === 'Point') {
+                                return turf.booleanPointInPolygon(feature.geometry.coordinates, watershed);
+                            } else if (feature.geometry.type === 'LineString') {
+                                return turf.booleanIntersects(feature, watershed);
+                            }
+                            return false;
+                        });
+                    }
+        
+                    // Filtrer et déplacer les features à l'intérieur du bassin versant
+                    ['upstream-ridges', 'thalwegs', 'upstreamthalwegs', 'downstreamthalwegs', 'ridges'].forEach(layerId => {
+                        if (map.getLayer(layerId)) {
+                            const source = map.getSource(layerId);
+                            if (source && source.type === 'geojson') {
+                                const featuresInWatershed = filterFeaturesInWatershed(source._data.features, watershedPolygon);
+                                
+                                // Créer une nouvelle couche pour les features à l'intérieur du bassin versant
+                                const insideLayerId = `${layerId}-inside`;
+                                const originalLayer = map.getLayer(layerId);
+                                updateLayer(insideLayerId, {
+                                    type: 'FeatureCollection',
+                                    features: featuresInWatershed
+                                }, {
+                                    type: originalLayer.type,
+                                    paint: originalLayer.paint,
+                                    layout: originalLayer.layout
+                                });
+        
+                                // Déplacer la nouvelle couche au-dessus du polygone du bassin versant
+                                map.moveLayer(insideLayerId, 'watershed-polygon');
+                                map.setLayoutProperty(insideLayerId, 'visibility', 'visible');
+                            }
+                        }
+                    });
+        
+                    // Traiter séparément la couche des nœuds permanents
+                    if (map.getLayer('permanent-nodes')) {
+                        const nodesSource = map.getSource('permanent-nodes');
+                        if (nodesSource && nodesSource.type === 'geojson') {
+                            const nodesInWatershed = filterFeaturesInWatershed(nodesSource._data.features, watershedPolygon);
+                            updateLayer('permanent-nodes-inside', {
+                                type: 'FeatureCollection',
+                                features: nodesInWatershed
+                            }, map.getLayer('permanent-nodes'));
+                            map.moveLayer('permanent-nodes-inside', 'watershed-polygon');
+                        }
+                    }
+        
+                    // Assurez-vous que toutes les couches intérieures sont visibles
+                    ['upstream-ridges-inside', 'thalwegs-inside', 'upstreamthalwegs-inside', 'downstreamthalwegs-inside', 'ridges-inside', 'permanent-nodes-inside'].forEach(layerId => {
+                        if (map.getLayer(layerId)) {
+                            map.setLayoutProperty(layerId, 'visibility', 'visible');
+                        }
+                    });
+        
+                } else {
+                    throw new Error("Impossible de créer un polygone de bassin versant valide");
+                }
+            } catch (error) {
+                console.error("Erreur lors de la création du bassin versant:", error);
+                showMessage("Impossible de créer le bassin versant. Les crêtes ne forment peut-être pas une frontière fermée.");
             }
+        } else {
+            showMessage("Aucune crête unique trouvée pour former le bassin versant.");
         }
     
         // Mise à jour des informations affichées
