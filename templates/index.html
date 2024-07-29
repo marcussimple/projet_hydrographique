@@ -15,31 +15,47 @@
 </head>
 <body>
     <div id="header">
-        Analyse de réseau hydrographique
+        <h1>Analyse de réseau hydrographique</h1>
     </div>
 
     <div id="content">
         <div id="left-panel">
             <div class="query-type" data-type="interrogation">Interrogation</div>
-            <ul id="interrogation-list" style="display: none;"></ul>
-
+            <div id="interrogation-list"></div>
             <div class="query-type" data-type="validation">Validation</div>
-            <ul id="validation-list" style="display: none;"></ul>
-
+            <div id="validation-list"></div>
             <div class="query-type" data-type="statistique">Calcul Statistique</div>
-            <ul id="statistique-list" style="display: none;"></ul>
+            <div id="statistique-list"></div>
+            
+            <div id="project-info">
+                <h3>Projet d'analyse de réseau hydrographique</h3>
+                <div class="project-details">
+                    <p class="degree">Maîtrise en sciences géomatiques</p>
+                    <p class="institution">Université Laval</p>
+                    <p class="period">Été 2024</p>
+                </div>
+                <div class="team-members">
+                    <h4>Équipe de projet</h4>
+                    <ul>
+                        <li>Jean Marc Duvers</li>
+                        <li>Ismaëlle Renaud</li>
+                        <li>Cliford Vilpique</li>
+                    </ul>
+                </div>
+            </div>
         </div>
 
-        <div id="map"></div>
+        <div id="map">
+            <button id="reset-button" class="map-button">Réinitialiser la carte</button>
+        </div>
 
         <div id="right-panel">
             <h3>Informations du cours d'eau</h3>
             <div id="thalweg-selector" style="margin-bottom: 15px;">
-                <input type="number" id="thalweg-id-input" placeholder="Entrez l'ID du cours d'eau">
+                <input type="text" id="thalweg-id-input" placeholder="ID du thalweg">
                 <button id="select-thalweg-button">Sélectionner</button>
             </div>
             <div id="selected-thalweg-info"></div>
-        
             <h3>Cours d'eau en amont/aval</h3>
             <div id="upstream-thalwegs-info"></div>
         </div>
@@ -54,11 +70,12 @@
     </div>
 
     {% csrf_token %}
-    <script src="{% static 'js/map_script.js' %}"></script>
 
     <div id="loading-overlay" style="display: none;">
         <img src="{% static 'image/loading.gif' %}" alt="Loading..." class="loader">
         <p>Chargement des données...</p>
     </div>
+
+    <script src="{% static 'js/map_script.js' %}"></script>
 </body>
 </html>
